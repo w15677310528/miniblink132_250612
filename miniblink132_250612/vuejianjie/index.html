@@ -1,0 +1,4365 @@
+<!DOCTYPE html>
+
+<html style="font-size: 100px">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>英雄画廊 - 自定义布局</title>
+    <!-- 添加缓存策略 -->
+    <meta http-equiv="Cache-Control" content="max-age=864000" />
+    <meta http-equiv="Pragma" content="cache" />
+    
+    <!-- 预加载关键图片资源 -->
+    <link rel="preload" href="./img/lineup-location-2.png" as="image">
+    <link rel="preload" href="./img/icon-carry-hero.png" as="image">
+    <link rel="preload" href="./img/Mana.webp" as="image">
+  <script>
+    //rem屏幕适应, 宽度大于2560时，字体大小为100px，宽度小于50px时，字体大小为50px 
+    (function (win, doc) {
+      if (!win.addEventListener) return;
+      function setFont() {
+        var html = document.documentElement;
+        var k = 2560;
+        if ((html.clientWidth / k) * 100 >= 150)
+          html.style.fontSize = "150px";
+        else if ((html.clientWidth / k) * 100 <= 50)
+          html.style.fontSize = "50px";
+        else html.style.fontSize = (html.clientWidth / k) * 100 + "px";
+      }
+      setFont();
+      setTimeout(function () {
+        setFont();
+      }, 300);
+      doc.addEventListener("DOMContentLoaded", setFont, false);
+      win.addEventListener("resize", setFont, false);
+      win.addEventListener("load", setFont, false);
+    })(window, document);
+  </script>
+  <!-- 添加CSP策略 这个强行https -->
+  <!-- <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests" />-->
+  <!-- 其他内容不变 -->
+
+  <script src="./js/v3.2.8/vue.global.prod.js" type="text/javascript" charset="utf-8"></script>
+  <script src="http://localhost:8899/cdp.js" crossorigin="anonymous"></script>
+  <!-- 引入CSS文件 -->
+  <link rel="stylesheet" href="./css/style.css" type="text/css" />
+</head>
+
+<body>
+  <div id="app">
+    <!-- 新版顶部菜单栏整体包裹 -->
+    <div v-if="!loading" class="top-menu-bar">
+      <div class="top-menu-btn-row">
+        <button :class="['top-menu-btn', {active: topMenu==='lineup'}]" @click="toggleTopMenu('lineup')">阵容</button>
+        <button :class="['top-menu-btn', {active: topMenu==='feature'}]" @click="toggleTopMenu('feature')">功能</button>
+      </div>
+
+    </div>
+    <!-- 站位图窗口 -->
+    <div v-if="showPositionPanel" class="position-panel">
+      <!-- 阶段切换按钮 -->
+      <!-- 站位技巧 -->
+      <div v-if="selectedLineup && getPositionInfo()" class="hex-strategy-section">
+        <div class="hex-strategy-hover">
+          <div class="hex-strategy-trigger" @mouseenter="showPositionStrategyTooltip($event)"
+            @mouseleave="hidePositionStrategyTooltip">
+            <span class="position-strategy-text">💡 站位技巧</span>
+          </div>
+          <div class="position-strategy-tooltip" v-show="positionStrategyTooltipVisible">
+            {{ getPositionInfo() }}
+          </div>
+        </div>
+      </div>
+      <div class="position-stage-btns">
+
+        <button :class="['position-stage-btn', {active: currentBoardLevel === 'l6', disabled: !hasStageData('l6')}]"
+          @click="switchPositionStage('l6')" :disabled="!hasStageData('l6')">早期</button>
+        <button :class="['position-stage-btn', {active: currentBoardLevel === 'l8', disabled: !hasStageData('l8')}]"
+          @click="switchPositionStage('l8')" :disabled="!hasStageData('l8')">中期</button>
+        <button :class="['position-stage-btn', {active: currentBoardLevel === 'l9'}]"
+          @click="switchPositionStage('l9')">最终</button>
+
+        <!-- L9阶段坐标切换按钮 -->
+        <template v-if="currentBoardLevel === 'l9' && hasL9SecondaryCoordinates">
+          <button :class="['position-coordinate-btn', {active: l9CoordinateMode === 'primary'}]"
+            @click="switchL9CoordinateMode('primary')" title="显示主要坐标(x,y)">站位1</button>
+          <button :class="['position-coordinate-btn', {active: l9CoordinateMode === 'secondary'}]"
+            @click="switchL9CoordinateMode('secondary')" title="显示备用坐标(x2,y2)">站位2</button>
+        </template>
+      </div>
+
+      <!-- 站位图底图 -->
+      <div class="lineup-location">
+        <!-- 英雄坐标点 -->
+        <div v-for="hero in getCurrentBoardHeroList()" :key="'pos-' + hero.x + '-' + hero.y" class="location-champion"
+          :class="'position' + hero.x + '-' + hero.y"
+          @mouseenter="hero.chessData && showHeroTooltip(hero.chessData, $event)" @mouseleave="hideHeroTooltip">
+          <!-- 英雄头像图片 -->
+          <i v-if="hero.chessData" class="hero-avatar-icon"
+            :style="{backgroundImage: 'url(https://game.gtimg.cn/images/lol/act/img/tft/champions/' + (hero.chessData.name || hero.chessData.chessId + '.png') + ')'}"></i>
+        </div>
+
+        <!-- 缺失前中期阵容提示遮罩 -->
+        <div
+          v-if="!hasStageData('l6') && !hasStageData('l8') && (currentBoardLevel === 'l6' || currentBoardLevel === 'l8')"
+          class="position-missing-notice">
+          <div class="missing-notice-content">
+            <i class="missing-notice-icon">⚠️</i>
+            <div class="missing-notice-text">
+              <div class="missing-notice-title">没有前中期阵容</div>
+              <div class="missing-notice-desc">该阵容暂无前期和中期阶段的英雄配置数据</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 缺失单个阶段数据提示遮罩 -->
+        <div v-else-if="!hasStageData(currentBoardLevel)" class="position-missing-notice">
+          <div class="missing-notice-content">
+            <i class="missing-notice-icon">⚠️</i>
+            <div class="missing-notice-text">
+              <div class="missing-notice-title">{{ getStageName(currentBoardLevel) }}阶段数据缺失</div>
+              <div class="missing-notice-desc">该阵容暂无{{ getStageName(currentBoardLevel) }}阶段的英雄配置数据</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 无站位坐标提示遮罩 -->
+        <div v-else-if="!hasValidPositions()" class="position-missing-notice">
+          <div class="missing-notice-content">
+            <i class="missing-notice-icon">📍</i>
+            <div class="missing-notice-text">
+              <div class="missing-notice-title">站位图暂不可用</div>
+              <div class="missing-notice-desc">该阵容的{{ getStageName(currentBoardLevel) }}阶段暂无站位坐标数据</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+    </div>
+
+    <div v-if="showLineupDetail" class="lineup-detail-panel">
+
+      <div v-if="selectedLineup" class="lineup-detail-content">
+        <!-- 关闭按钮 -->
+        <button class="lineup-detail-close-btn" @click="closeLineupDetail" title="关闭阵容详情">×</button>
+
+        <!-- 阵容标题区 -->
+        <div class="lineup-title-row">
+
+
+
+
+          <div class="selectedLineup-quality" :class="'quality-' + selectedLineup.quality.toLowerCase()">
+            <img :src="'./img/icon-tier-' + selectedLineup.quality + '.webp'" :alt="selectedLineup.quality"
+              class="quality-icon" />
+          </div>
+
+
+
+          <span class="lineup-title">{{ selectedLineup.name }}</span>
+        </div>
+        <!-- 阶段切换按钮和站位图按钮 -->
+        <div class="stage-toggle-btns">
+          <div :class="['stage-toggle-btn', {active: showEarlyMid}]" @click="showEarlyMid = !showEarlyMid">
+            <span class="filter-checkbox">
+              <span v-if="showEarlyMid" class="checkbox-inner"></span>
+            </span>
+            <span class="filter-label">{{ showEarlyMid ? '隐藏前中期阵容' : '显示前中期阵容' }}</span>
+          </div>
+
+
+        </div>
+        <!-- 阶段英雄头像区 -->
+        <div class="lineup-stage-row">
+          <template v-if="showEarlyMid">
+            <!-- L6前排阵容 - 只有当有有效英雄数据时才显示 -->
+            <div
+              v-if="selectedLineup.hero_location_l6 && selectedLineup.hero_location_l6.length > 0 && selectedLineup.hero_location_l6.some(hero => hero.chessData && hero.chessData.price !== '0')"
+              class="stage-heroes">
+              <!-- 前排位置标识 -->
+              <div class="position-indicator front-row">前</div>
+              <div v-for="hero in selectedLineup.hero_location_l6 || []"
+                :key="'l6-' + (hero.chessData ? hero.chessData.chessId : 'missing-' + Math.random())" class="stage-hero"
+                style="position:relative;pointer-events:auto;" v-show="!hero.chessData || hero.chessData.price !== '0'">
+                <div class="stage-hero-cell"
+                  :class="{ 'selected': hero.chessData && isHeroSelected(hero.chessData.chessId) }"
+                  @click="hero.chessData && selectHero(hero.chessData)">
+                  <img v-if="hero.chessData" class="stage-hero-avatar"
+                    :src="'https://game.gtimg.cn/images/lol/act/img/tft/champions/' + (hero.chessData.name || hero.chessData.chessId + '.png')"
+                    :alt="hero.chessData.displayName" @mouseenter="showHeroTooltip(hero.chessData, $event)"
+                    @mouseleave="hideHeroTooltip" />
+                  <div v-else class="stage-hero-missing">已删除</div>
+
+                </div>
+                <img v-if="hero.isCore" class="icon-carry-center" src="img/icon-carry-hero.png" alt="C位"
+                  @mouseenter="showTooltipText('核心C位英雄', $event)" @mouseleave="hideTooltipText" />
+                <div class="star-row" v-if="hero.isThreeStar" @mouseenter="showTooltipText('三星英雄', $event)"
+                  @mouseleave="hideTooltipText">
+                  <span class="icon-star" v-for="star in 3" :key="star">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="15" fill="none" viewBox="0 0 16 15">
+                      <path fill="#ffd900" fill-rule="evenodd"
+                        d="m8 11.75-4.408 2.318.842-4.91L.867 5.683l4.929-.716L8 .5l2.204 4.466 4.929.716-3.566 3.477.841 4.909z"
+                        clip-rule="evenodd"></path>
+                    </svg>
+                  </span>
+                </div>
+                <div class="equipment-list">
+                  <div class="component-equipment" v-for="(equip, idx) in hero.equipData" :key="idx"
+                    @mouseenter="showEquipTooltip(equip, $event)" @mouseleave="hideEquipTooltip">
+                    <div class="equip-pic">
+                      <img :src="equip.imagePath" :alt="equip.name" />
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+              <div v-if="selectedLineup.early_info" class="hex-strategy-section">
+                <div class="hex-strategy-hover">
+                  <div class="hex-strategy-trigger" @mouseenter="showEarlyStrategyTooltip($event)"
+                    @mouseleave="hideEarlyStrategyTooltip">
+                    <span class="early-strategy-text">💡 前期过度</span>
+                  </div>
+                  <div class="early-strategy-tooltip" v-show="earlyStrategyTooltipVisible">
+                    {{ selectedLineup.early_info }}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- L6前排空提示 -->
+            <div
+              v-else-if="!selectedLineup.hero_location_l6 || selectedLineup.hero_location_l6.length === 0 || !selectedLineup.hero_location_l6.some(hero => hero.chessData && hero.chessData.price !== '0')"
+              class="stage-empty-hint">
+              <span class="empty-hint-text">📍 前期阵容：无特定英雄推荐，灵活过渡</span>
+            </div>
+
+            <!-- L8中排阵容 - 只有当有有效英雄数据时才显示 -->
+            <div
+              v-if="selectedLineup.hero_location_l8 && selectedLineup.hero_location_l8.length > 0 && selectedLineup.hero_location_l8.some(hero => hero.chessData && hero.chessData.price !== '0')"
+              class="stage-heroes">
+              <!-- 中排位置标识 -->
+              <div class="position-indicator mid-row">中</div>
+              <div v-for="hero in selectedLineup.hero_location_l8 || []"
+                :key="'l8-' + (hero.chessData ? hero.chessData.chessId : 'missing-' + Math.random())" class="stage-hero"
+                style="position:relative;pointer-events:auto;" v-show="!hero.chessData || hero.chessData.price !== '0'">
+                <div class="stage-hero-cell"
+                  :class="{ 'selected': hero.chessData && isHeroSelected(hero.chessData.chessId) }"
+                  @click="hero.chessData && selectHero(hero.chessData)">
+                  <img v-if="hero.chessData" class="stage-hero-avatar"
+                    :src="'https://game.gtimg.cn/images/lol/act/img/tft/champions/' + (hero.chessData.name || hero.chessData.chessId + '.png')"
+                    :alt="hero.chessData.displayName" @mouseenter="showHeroTooltip(hero.chessData, $event)"
+                    @mouseleave="hideHeroTooltip" />
+                  <div v-else class="stage-hero-missing">已删除</div>
+
+                </div>
+                <img v-if="hero.isCore" class="icon-carry-center" src="img/icon-carry-hero.png" alt="C位"
+                  @mouseenter="showTooltipText('核心C位英雄', $event)" @mouseleave="hideTooltipText" />
+                <div class="star-row" v-if="hero.isThreeStar" @mouseenter="showTooltipText('三星英雄', $event)"
+                  @mouseleave="hideTooltipText">
+                  <span class="icon-star" v-for="star in 3" :key="star">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="15" fill="none" viewBox="0 0 16 15">
+                      <path fill="#ffd900" fill-rule="evenodd"
+                        d="m8 11.75-4.408 2.318.842-4.91L.867 5.683l4.929-.716L8 .5l2.204 4.466 4.929.716-3.566 3.477.841 4.909z"
+                        clip-rule="evenodd"></path>
+                    </svg>
+                  </span>
+                </div>
+                <div class="equipment-list">
+                  <div class="component-equipment" v-for="(equip, idx) in hero.equipData" :key="idx"
+                    @mouseenter="showEquipTooltip(equip, $event)" @mouseleave="hideEquipTooltip">
+                    <div class="equip-pic">
+                      <img :src="equip.imagePath" :alt="equip.name" />
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+
+            <!-- L8中排空提示 -->
+            <div
+              v-else-if="!selectedLineup.hero_location_l8 || selectedLineup.hero_location_l8.length === 0 || !selectedLineup.hero_location_l8.some(hero => hero.chessData && hero.chessData.price !== '0')"
+              class="stage-empty-hint">
+              <span class="empty-hint-text">📍 中期阵容：无特定英雄推荐，灵活过渡</span>
+            </div>
+          </template>
+          <!-- L9区域始终显示 -->
+
+          <div class="stage-heroes">
+            <!-- 后排位置标识 -->
+            <div class="position-indicator back-row">终</div>
+            <div v-for="hero in selectedLineup.hero_location_l9 || []"
+              :key="'l9-' + (hero.chessData ? hero.chessData.chessId : 'missing-' + Math.random())" class="stage-hero"
+              style="position:relative;pointer-events:auto;" v-show="!hero.chessData || hero.chessData.price !== '0'">
+              <div class="stage-hero-cell"
+                :class="{ 'selected': hero.chessData && isHeroSelected(hero.chessData.chessId) }"
+                @click="hero.chessData && selectHero(hero.chessData)">
+                <img v-if="hero.chessData" class="stage-hero-avatar"
+                  :src="'https://game.gtimg.cn/images/lol/act/img/tft/champions/' + (hero.chessData.name || hero.chessData.chessId + '.png')"
+                  :alt="hero.chessData.displayName" @mouseenter="showHeroTooltip(hero.chessData, $event)"
+                  @mouseleave="hideHeroTooltip" />
+                <div v-else class="stage-hero-missing">已删除</div>
+              </div>
+              <img v-if="hero.isCore" class="icon-carry-center" src="img/icon-carry-hero.png" alt="C位"
+                @mouseenter="showTooltipText('核心C位英雄', $event)" @mouseleave="hideTooltipText" />
+              <div class="star-row" v-if="hero.isThreeStar" @mouseenter="showTooltipText('三星英雄', $event)"
+                @mouseleave="hideTooltipText">
+                <span class="icon-star" v-for="star in 3" :key="star">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="15" fill="none" viewBox="0 0 16 15">
+                    <path fill="currentColor" fill-rule="evenodd"
+                      d="m8 11.75-4.408 2.318.842-4.91L.867 5.683l4.929-.716L8 .5l2.204 4.466 4.929.716-3.566 3.477.841 4.909z"
+                      clip-rule="evenodd"></path>
+                  </svg>
+              </div>
+              <div class="equipment-list">
+                <div class="component-equipment" v-for="(equip, idx) in hero.equipData" :key="idx"
+                  @mouseenter="showEquipTooltip(equip, $event)" @mouseleave="hideEquipTooltip">
+                  <div class="equip-pic">
+                    <img :src="equip.imagePath" :alt="equip.name" />
+                  </div>
+
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 装备顺序区域 -->
+        <div v-if="selectedLineup && selectedLineup.equipment_order" class="lineup-equipment-section">
+          <!-- 标题与装备列表并排 -->
+          <div class="lineup-equipment-section-header">
+            <!-- 标题和攻略上下布局的容器 -->
+            <div class="title-strategy-container">
+              <!--<div class="section-title">装备优先级</div>-->
+              <!-- 装备攻略区域 -->
+              <div v-if="selectedLineup.equipment_info" class="equipment-strategy-section">
+                <div class="equipment-strategy-hover">
+                  <div class="equipment-strategy-trigger" @mouseenter="showEquipmentStrategyTooltip($event)"
+                    @mouseleave="hideEquipmentStrategyTooltip">
+                    <span class="equipment-strategy-text">💡 装备搭配</span>
+                  </div>
+                  <div class="equipment-strategy-tooltip" v-show="equipmentStrategyTooltipVisible">
+                    {{ selectedLineup.equipment_info }}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="equipment-order-list">
+              <template v-for="(equipId, index) in getEquipmentOrder(selectedLineup.equipment_order)" :key="equipId">
+                <div class="equipment-order-item" @mouseenter="showEquipTooltip(getEquipmentById(equipId), $event)"
+                  @mouseleave="hideEquipTooltip">
+                  <div class="equipment-priority">{{ index + 1 }}</div>
+                  <div class="equipment-info" v-if="getEquipmentById(equipId)">
+                    <img :src="getEquipmentById(equipId).imagePath" :alt="getEquipmentById(equipId).name"
+                      class="equipment-icon" />
+                  </div>
+                  <div v-else class="equipment-info">
+                    <div class="equipment-missing">装备缺失</div>
+                  </div>
+
+                </div>
+                <!-- 装备之间的箭头，最后一个装备后不显示箭头 -->
+                <div v-if="index < getEquipmentOrder(selectedLineup.equipment_order).length - 1"
+                  class="equipment-arrow">→</div>
+              </template>
+            </div>
+          </div>
+        </div>
+
+        <!-- 海克斯推荐区域 -->
+        <div v-if="selectedLineup && selectedLineup.hexbuff" class="lineup-hex-section">
+          <!-- 标题与海克斯列表并排 -->
+          <div class="lineup-hex-section-header">
+            <!-- 标题和攻略上下布局的容器 -->
+            <div class="title-strategy-container">
+              <!-- <div class="section-title">海克斯推荐</div> -->
+              <!-- 海克斯攻略区域 -->
+              <div v-if="selectedLineup.hex_info" class="hex-strategy-section">
+                <div class="hex-strategy-hover">
+                  <div class="hex-strategy-trigger" @mouseenter="showHexStrategyTooltip($event)"
+                    @mouseleave="hideHexStrategyTooltip">
+                    <span class="hex-strategy-text">💡 海克斯攻略</span>
+                  </div>
+                  <div class="hex-strategy-tooltip" v-show="hexStrategyTooltipVisible">
+                    {{ selectedLineup.hex_info }}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="hex-content">
+              <!-- 推荐海克斯 -->
+              <div v-if="selectedLineup.hexbuff.recomm" class="hex-category">
+                <div class="hex-category-title">优先</div>
+                <div class="hex-list">
+                  <div v-for="hexId in getHexList(selectedLineup.hexbuff.recomm)" :key="'recomm-' + hexId"
+                    class="hex-item" @mouseenter="showHexTooltip(hexId, $event)" @mouseleave="hideHexTooltip">
+                    <div class="hex-info" v-if="getHexById(hexId)">
+                      <img :src="getHexById(hexId).imgUrl || getHexById(hexId).imagePath" :alt="getHexById(hexId).name"
+                        class="hex-icon" />
+                    </div>
+                    <div v-else class="hex-info">
+                      <div class="hex-missing">海克斯缺失</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <!-- 替换海克斯 -->
+              <div v-if="selectedLineup.hexbuff.replace" class="hex-category">
+                <div class="hex-category-title">备选</div>
+                <div class="hex-list">
+                  <div v-for="hexId in getHexList(selectedLineup.hexbuff.replace)" :key="'replace-' + hexId"
+                    class="hex-item" @mouseenter="showHexTooltip(hexId, $event)" @mouseleave="hideHexTooltip">
+                    <div class="hex-info" v-if="getHexById(hexId)">
+                      <img :src="getHexById(hexId).imgUrl || getHexById(hexId).imagePath" :alt="getHexById(hexId).name"
+                        class="hex-icon" />
+                    </div>
+                    <div v-else class="hex-info">
+                      <div class="hex-missing">海克斯缺失</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+
+        </div>
+
+        <!-- 攻略信息区域 -->
+        <div v-if="selectedLineup && hasStrategyInfo(selectedLineup)" class="lineup-strategy-section">
+          <div class="section-title" @click="toggleStrategyExpanded()">
+            <span>阵容攻略</span>
+            <span class="strategy-toggle-icon" :class="{ 'expanded': strategyExpanded }">
+              {{ strategyExpanded ? '▼' : '▶' }}
+            </span>
+          </div>
+
+          <!-- 攻略内容区域 - 可展开收起 -->
+          <div v-show="strategyExpanded" class="strategy-content-wrapper">
+            <!-- D牌时机 -->
+            <div v-if="selectedLineup.d_time" class="strategy-item">
+              <div class="strategy-label">D牌时机</div>
+              <div class="strategy-content">{{ selectedLineup.d_time }}</div>
+            </div>
+
+            <!-- 对局分析 -->
+            <div v-if="selectedLineup.enemy_info" class="strategy-item">
+              <div class="strategy-label">对局分析</div>
+              <div class="strategy-content">{{ selectedLineup.enemy_info }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 推荐天选英雄区域 -->
+        <div v-if="selectedLineup && hasChosenHeroInfo()" class="chosen-hero-section">
+          <div class="section-title" @click="toggleChosenHeroExpanded()">
+            <span>推荐赛季之星</span>
+            <span class="strategy-toggle-icon" :class="{ 'expanded': chosenHeroExpanded }">
+              {{ chosenHeroExpanded ? '▼' : '▶' }}
+            </span>
+          </div>
+
+          <!-- 推荐天选英雄内容区域 - 可展开收起 -->
+          <div v-show="chosenHeroExpanded" class="chosen-hero-content">
+            <!-- 前期推荐天选 -->
+            <div v-if="getChosenHeroData('early').length > 0" class="chosen-hero-stage">
+              <div class="chosen-hero-stage-title">
+
+                <span>前期优选</span>
+              </div>
+              <div class="chosen-hero-list">
+                <div v-for="hero in getChosenHeroData('early')" :key="'early-' + hero.id" class="chosen-hero-item"
+                  @mouseenter="showHeroTooltip(getHeroById(hero.id), $event)" @mouseleave="hideHeroTooltip">
+                  <div class="chosen-hero-avatar-container">
+                    <img class="chosen-hero-avatar"
+                      :src="'https://game.gtimg.cn/images/lol/act/img/tft/champions/' + hero.imagePath"
+                      :alt="hero.name" />
+
+                  </div>
+                  <div class="chosen-hero-info">
+                    <div class="chosen-hero-name">{{ (getHeroById(hero.id) && getHeroById(hero.id).displayName) ||
+                      (getHeroById(hero.id) && getHeroById(hero.id).name) }}</div>
+                    <div v-if="hero.synergy" class="chosen-hero-synergy">{{ hero.synergy.name }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 中期推荐天选 -->
+            <div v-if="getChosenHeroData('middle').length > 0" class="chosen-hero-stage">
+              <div class="chosen-hero-stage-title">
+
+                <span>中期优选</span>
+              </div>
+              <div class="chosen-hero-list">
+                <div v-for="hero in getChosenHeroData('middle')" :key="'middle-' + hero.id" class="chosen-hero-item"
+                  @mouseenter="showHeroTooltip(getHeroById(hero.id), $event)" @mouseleave="hideHeroTooltip">
+                  <div class="chosen-hero-avatar-container">
+                    <img class="chosen-hero-avatar"
+                      :src="'https://game.gtimg.cn/images/lol/act/img/tft/champions/' + hero.imagePath"
+                      :alt="hero.name" />
+
+                  </div>
+                  <div class="chosen-hero-info">
+                    <div class="chosen-hero-name">{{ (getHeroById(hero.id) && getHeroById(hero.id).displayName) ||
+                      (getHeroById(hero.id) && getHeroById(hero.id).name) }}</div>
+                    <div v-if="hero.synergy" class="chosen-hero-synergy">{{ hero.synergy.name }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 后期推荐天选 -->
+            <div v-if="getChosenHeroData('late').length > 0" class="chosen-hero-stage">
+              <div class="chosen-hero-stage-title">
+
+                <span>后期优选</span>
+              </div>
+              <div class="chosen-hero-list">
+                <div v-for="hero in getChosenHeroData('late')" :key="'late-' + hero.id" class="chosen-hero-item"
+                  @mouseenter="showHeroTooltip(getHeroById(hero.id), $event)" @mouseleave="hideHeroTooltip">
+                  <div class="chosen-hero-avatar-container">
+                    <img class="chosen-hero-avatar"
+                      :src="'https://game.gtimg.cn/images/lol/act/img/tft/champions/' + hero.imagePath"
+                      :alt="hero.name" />
+
+                  </div>
+                  <div class="chosen-hero-info">
+                    <div class="chosen-hero-name">{{ (getHeroById(hero.id) && getHeroById(hero.id).displayName) ||
+                      (getHeroById(hero.id) && getHeroById(hero.id).name) }}</div>
+                    <div v-if="hero.synergy" class="chosen-hero-synergy">{{ hero.synergy.name }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 替换推荐天选 -->
+            <div v-if="getChosenHeroData('replace').length > 0" class="chosen-hero-stage">
+              <div class="chosen-hero-stage-title">
+
+                <span>后期备选</span>
+              </div>
+              <div class="chosen-hero-list">
+                <div v-for="hero in getChosenHeroData('replace')" :key="'replace-' + hero.id" class="chosen-hero-item"
+                  @mouseenter="showHeroTooltip(getHeroById(hero.id), $event)" @mouseleave="hideHeroTooltip">
+                  <div class="chosen-hero-avatar-container">
+                    <img class="chosen-hero-avatar"
+                      :src="'https://game.gtimg.cn/images/lol/act/img/tft/champions/' + hero.imagePath"
+                      :alt="hero.name" />
+
+                  </div>
+                  <div class="chosen-hero-info">
+                    <div class="chosen-hero-name">{{ (getHeroById(hero.id) && getHeroById(hero.id).displayName) ||
+                      (getHeroById(hero.id) && getHeroById(hero.id).name) }}</div>
+                    <div v-if="hero.synergy" class="chosen-hero-synergy">{{ hero.synergy.name }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 无数据提示 -->
+            <div
+              v-if="getChosenHeroData('early').length === 0 && getChosenHeroData('middle').length === 0 && getChosenHeroData('late').length === 0 && getChosenHeroData('replace').length === 0"
+              class="chosen-hero-empty">
+              <div class="empty-icon">📋</div>
+              <div class="empty-text">暂无推荐天选英雄数据</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 可替换英雄区域 -->
+        <div v-if="selectedLineup && hasReplaceableHeroes()" class="replaceable-heroes-section">
+          <div class="section-title" @click="toggleReplaceableHeroesExpanded()">
+            <span>可替换英雄</span>
+            <span class="strategy-toggle-icon" :class="{ 'expanded': replaceableHeroesExpanded }">
+              {{ replaceableHeroesExpanded ? '▼' : '▶' }}
+            </span>
+          </div>
+
+          <!-- 可替换英雄内容区域 - 可展开收起 -->
+          <div v-show="replaceableHeroesExpanded" class="replaceable-heroes-content">
+            <div v-for="(group, index) in getReplaceableHeroGroups()" :key="'replace-group-' + index"
+              class="replaceable-hero-group">
+
+              <div class="replaceable-hero-list">
+                <!-- 原英雄 -->
+                <div class="replaceable-hero-original">
+                  <div class="replaceable-hero-label">原英雄:</div>
+                  <div class="replaceable-heroes-container">
+                    <div v-for="heroId in group.original" :key="'original-' + heroId" class="replaceable-hero-item"
+                      @mouseenter="showHeroTooltip(getHeroById(heroId), $event)" @mouseleave="hideHeroTooltip()">
+                      <div class="replaceable-hero-cell">
+                        <img v-if="getHeroById(heroId)" class="replaceable-hero-avatar"
+                          :src="'https://game.gtimg.cn/images/lol/act/img/tft/champions/' + getHeroById(heroId).name"
+                          :alt="getHeroById(heroId).name" />
+                        <div v-else class="replaceable-hero-missing">未找到</div>
+                      </div>
+                      <div class="replaceable-hero-info">
+                        <div class="replaceable-hero-name">{{ (getHeroById(heroId) && getHeroById(heroId).displayName)
+                          || (getHeroById(heroId) && getHeroById(heroId).name) || '未知英雄' }}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 箭头 -->
+                <div class="replaceable-arrow">→</div>
+
+                <!-- 替换英雄 -->
+                <div class="replaceable-hero-replacement">
+                  <div class="replaceable-hero-label">可替换为:</div>
+                  <div class="replaceable-heroes-container">
+                    <div v-for="heroId in group.replacement" :key="'replacement-' + heroId"
+                      class="replaceable-hero-item" @mouseenter="showHeroTooltip(getHeroById(heroId), $event)"
+                      @mouseleave="hideHeroTooltip()">
+                      <div class="replaceable-hero-cell">
+                        <img v-if="getHeroById(heroId)" class="replaceable-hero-avatar"
+                          :src="'https://game.gtimg.cn/images/lol/act/img/tft/champions/' + getHeroById(heroId).name"
+                          :alt="getHeroById(heroId).name" />
+                        <div v-else class="replaceable-hero-missing">未找到</div>
+                      </div>
+                      <div class="replaceable-hero-info">
+                        <div class="replaceable-hero-name">{{ (getHeroById(heroId) && getHeroById(heroId).displayName)
+                          || (getHeroById(heroId) && getHeroById(heroId).name) || '未知英雄' }}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 无数据提示 -->
+            <div v-if="!hasReplaceableHeroes()" class="replaceable-heroes-empty">
+              <div class="empty-icon">🔄</div>
+              <div class="empty-text">暂无可替换英雄数据</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div v-if="loading" class="loading-container">
+      <div class="loading-hexagon"></div>
+      <div class="loading-text-container">
+        <span class="loading-text">{{ loadingMessage }}</span>
+        <span class="loading-dots" v-if="loadingProgress < 100">
+          <span class="dot"></span>
+          <span class="dot"></span>
+          <span class="dot"></span>
+        </span>
+      </div>
+      <div class="loading-progress">
+        <div class="progress-bar" :style="{ width: loadingProgress + '%' }"></div>
+      </div>
+      <div class="progress-percentage">{{ loadingProgress }}%</div>
+    </div>
+
+    <!-- 赛季选择器 -->
+    <div v-if="showSeasonSelector" class="season-selector-overlay">
+      <div class="season-selector-dialog">
+        <div class="season-selector-header">
+          <h3>选择游戏赛季</h3>
+          <p>检测到多个赛季数据，请选择要使用的赛季：</p>
+        </div>
+
+        <div class="season-options">
+          <div v-for="season in availableSeasons" :key="season.key" class="season-option"
+            :class="{ 'selected': selectedSeason === season.key }" @click="selectedSeason = season.key">
+            <div class="season-option-radio">
+              <span v-if="selectedSeason === season.key" class="radio-checked"></span>
+            </div>
+            <div class="season-option-content">
+              <div class="season-name">{{ season.name }}</div>
+              <div class="season-description">
+                {{ season.key === 'current' ? '当前赛季' : '轮换赛季' }}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="season-selector-buttons">
+          <button class="season-confirm-btn" @click="confirmSeasonSelection" :disabled="!selectedSeason">
+            确认选择
+          </button>
+        </div>
+      </div>
+    </div>
+
+
+
+
+
+    <!-- 阵容二级菜单（data-lineup） -->
+    <div class="data-lineup center-panel" v-if="topMenu==='lineup'">
+      <!-- 标签页切换组件 -->
+      <div class="tab-container" style="position:relative;">
+        <!-- 关闭按钮 -->
+        <button class="lineup-close-btn" @click="toggleTopMenu('lineup')" title="关闭">×</button>
+        <div class="tab-header">
+          <div class="tab" :class="{active: activeTab === 'opgg'}" @click="switchTab('opgg')">
+            OP.GG
+          </div>
+          <div class="tab" :class="{active: activeTab === 'tft'}" @click="switchTab('tft')">
+            官方
+          </div>
+          <div class="tab" :class="{active: activeTab === 'favorite'}" @click="switchTab('favorite')">
+            收藏
+            <span v-if="favoriteLineups.length > 0" class="favorite-count">({{ favoriteLineups.length }})</span>
+          </div>
+
+          <!-- 搜索框组件 -->
+          <div class="search-container">
+            <input type="text" class="search-input" placeholder="支持英雄`名称`外号`拼音`首拼`阵容标题..." v-model="searchText" />
+
+
+            <!-- 筛选按钮 -->
+            <button class="filter-toggle-button" @click="toggleFilterPanel($event)" title="筛选职业羁绊以及等级">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="4" y1="21" x2="4" y2="14"></line>
+                <line x1="4" y1="10" x2="4" y2="3"></line>
+                <line x1="12" y1="21" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12" y2="3"></line>
+                <line x1="20" y1="21" x2="20" y2="16"></line>
+                <line x1="20" y1="12" x2="20" y2="3"></line>
+                <line x1="1" y1="14" x2="7" y2="14"></line>
+                <line x1="9" y1="8" x2="15" y2="8"></line>
+                <line x1="17" y1="16" x2="23" y2="16"></line>
+              </svg>
+            </button>
+
+            <!-- 重置按钮 -->
+            <button class="reset-search-button" @click="resetSearch" title="重置搜索以及筛选">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 12a9 9 0 0 1-9 9c-4.97 0-9-4.03-9-9s4.03-9 9-9h4.5"></path>
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <line x1="21" y1="3" x2="9" y2="15"></line>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- 标签内容 -->
+        <div class="tab-content">
+          <!-- 收藏存储使用情况显示 -->
+
+
+          <!-- 收藏赛季信息显示 -->
+          <div v-if="activeTab === 'favorite'" class="season-info-panel">
+            <div class="season-info-content">
+              <span class="season-text">当前赛季：{{ getCurrentSeason() || '未知' }}</span>
+              <span class="season-text2" v-if="!showAllFavorites">不是当前赛季的收藏阵容将不会显示</span>
+              <span class="season-text2" v-if="showAllFavorites" style="color: #00ff00;">正在显示全部收藏阵容（包含所有赛季）</span>
+              <span class="season-count">显示 {{ currentLineupList.length }} / {{ favoriteLineups.length }} 个收藏阵容</span>
+              <button class="show-all-favorites-btn" @click="toggleShowAllFavorites"
+                :title="showAllFavorites ? '只显示当前赛季' : '显示全部收藏阵容'">
+                {{ showAllFavorites ? '只显示当前赛季' : '显示全部收藏' }}
+              </button>
+            </div>
+          </div>
+
+          <!-- 阵容内容（使用计算属性统一处理） -->
+          <div class="tab-pane">
+            <div v-if="currentLineupList && currentLineupList.length" class="lineup-list">
+              <div v-for="(lineup, index) in filteredLineups" :key="activeTab + '-' + index" class="lineup-item" :class="{ 
+                    'outdated': lineup.isOld, 
+                    'has-invalid-heroes': lineup.hasInvalidHeroes 
+                  }" @click="lineup.hasInvalidHeroes ? null : selectLineup(lineup)">
+                <!-- 收藏按钮 -->
+                <button class="favorite-btn" :class="{ 'favorited': isLineupFavorited(lineup) }"
+                  @click.stop="toggleFavorite(lineup)" :title="isLineupFavorited(lineup) ? '取消收藏' : '收藏阵容'">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path
+                      d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z">
+                    </path>
+                  </svg>
+                </button>
+
+                <div class="lineup-container">
+                  <div class="lineup-quality" :class="'quality-' + lineup.quality.toLowerCase()">
+                    <img :src="'./img/icon-tier-' + lineup.quality + '.webp'" :alt="lineup.quality"
+                      class="quality-icon" />
+                    <!-- 添加价格统计 -->
+                    <div class="lineup-price" v-if="lineup.hero_location_l9 && lineup.hero_location_l9.length">
+                      <i class="hero-price-img"></i>
+                      {{ lineup.hero_location_l9.filter(h => !h.chessData || h.chessData.price !== '0').reduce((total,
+                      hero) => {
+                      const price = hero.chessData && hero.chessData.price ?
+                      parseInt(hero.chessData.price) : 0; return total + price
+                      * (hero.unit && hero.unit.isThreeStar ? 9 : 3); }, 0) }}
+                    </div>
+
+                  </div>
+                  <div class="lineup-content">
+                    <div class="lineup-name">
+                      {{ lineup.name }}
+                      <span class="lineup-stats"
+                        v-if="lineup.avgPlacement || lineup.pickRate || lineup.top4Rate || lineup.winRate">
+                        <span v-if="lineup.avgPlacement" class="stat-item">平均排名: {{ lineup.avgPlacement }}</span>
+                        <span v-if="lineup.pickRate" class="stat-item">使用率: {{ lineup.pickRate }}</span>
+                        <span v-if="lineup.top4Rate" class="stat-item">前四率: {{ lineup.top4Rate }}</span>
+                        <span v-if="lineup.winRate" class="stat-item">第一率: {{ lineup.winRate }}</span>
+                      </span>
+                    </div>
+                    <!-- 添加英雄展示 -->
+                    <div class="lineup-heroes" v-if="lineup.hero_location_l9 && lineup.hero_location_l9.length">
+                      <div
+                        v-for="(hero, heroIndex) in lineup.hero_location_l9.filter(h => !h.chessData || h.chessData.price !== '0').slice(0, 9)"
+                        :key="'hero-'+heroIndex" class="lineup-hero">
+                        <!-- 三星标记行 - 只有当阵容中至少有一个英雄是三星时才显示 -->
+                        <div class="hero-threestar-row"
+                          v-if="lineup.hero_location_l9.filter(h => !h.chessData || h.chessData.price !== '0').some(h => h.isThreeStar)">
+                          <div v-if="hero.isThreeStar" class="hero-star-icon" v-for="star in 3" :key="star">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="15" fill="none"
+                              viewBox="0 0 16 15">
+                              <path fill="currentColor" fill-rule="evenodd"
+                                d="m8 11.75-4.408 2.318.842-4.91L.867 5.683l4.929-.716L8 .5l2.204 4.466 4.929.716-3.566 3.477.841 4.909z"
+                                clip-rule="evenodd"></path>
+                            </svg>
+                          </div>
+                        </div>
+                        <!-- 英雄1图片1容器1 -->
+                        <div class="lineup-hero-image-container">
+                          <img v-if="hero.chessData"
+                            :src="hero_avatar_xiao.replace('{{name}}', hero.chessData.name || hero.chessData.chessId + '.png')"
+                            :alt="hero.chessData.displayName" class="lineup-hero-image"
+                            @mouseenter="showHeroTooltip(hero.chessData, $event)" @mouseleave="hideHeroTooltip" />
+                          <div v-else class="lineup-hero-missing">
+                            <span>英雄已删除</span>
+                          </div>
+                          <div class="lineup-hero-img-name">{{ hero.chessData ? hero.chessData.displayName : '已删除' }}
+                          </div>
+                          <!-- C位图标 -->
+                          <img v-if="hero.isCore && hero.chessData" src="./img/icon-carry-hero.png" alt="C位"
+                            class="hero-core-icon" @mouseenter="showTooltipText('核心C位英雄', $event)"
+                            @mouseleave="hideTooltipText" />
+                        </div>
+                        <!-- 装备栏 -->
+                        <div class="hero-items-row" v-if="hero.chessData">
+                          <div v-for="slot in 3" :key="slot" class="hero-item-slot">
+                            <img v-if="hero.equipData && hero.equipData[slot-1]" :src="hero.equipData[slot-1].imagePath"
+                              :alt="hero.equipData[slot-1].name" class="hero-item-image"
+                              @mouseenter="showEquipTooltip(hero.equipData[slot-1], $event)"
+                              @mouseleave="hideEquipTooltip" />
+                          </div>
+                        </div>
+                      </div>
+                      <div
+                        v-if="lineup.hero_location_l9.filter(h => !h.chessData || h.chessData.price !== '0').length > 9"
+                        class="lineup-hero-more">
+                        +{{ lineup.hero_location_l9.filter(h => !h.chessData || h.chessData.price !== '0').length - 9 }}
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-else class="no-data">
+              <p>暂无{{ activeTab === 'opgg' ? 'OP.GG' : activeTab === 'tft' ? '官方' : '收藏' }}阵容数据</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="!loading" class="avatar-mode-container">
+      <div v-for="price in [1,2,3,4,5]" :key="'row-'+price" class="avatar-row">
+        <!-- 费用标识小框 -->
+        <div class="cost-indicator" :class="'cost-' + price">
+          {{ price }}
+        </div>
+        <div class="avatar-row-list">
+          <div v-for="hero in heroDataList.filter(h=>parseInt(h.price)===price)" :key="hero.chessId" class="avatar-cell"
+            :class="{ 'selected': isHeroSelected(hero.chessId) }" @click.stop="toggleHeroSelection(hero)"
+            @mouseenter="showHeroTooltip(hero, $event)" @mouseleave="hideHeroTooltip">
+            <img :src="hero_avatar_xiao.replace('{{name}}', hero.name || hero.chessId + '.png')" :alt="hero.displayName"
+              class="avatar-img" />
+          </div>
+        </div>
+      </div>
+      <!-- 悬浮框浮层 -->
+      <div v-if="tooltipVisible && tooltipHero" class="hero-tooltip"
+        :style="{left: tooltipX + 'px', top: tooltipY + 'px', visibility: 'visible', opacity: 1, position: 'fixed', zIndex: 2000}">
+        <!-- position-panel简化显示：只显示头像、名字和金币 -->
+        <template v-if="isPositionPanelTooltip">
+          <div class="hero-tooltip-header">
+            <img :src="hero_avatar_xiao.replace('{{name}}', tooltipHero.name || tooltipHero.chessId + '.png')"
+              :alt="tooltipHero.displayName" class="hero-tooltip-image" :class="'price-tooltip-' + tooltipHero.price" />
+            <div class="hero-tooltip-info">
+              <div class="hero-tooltip-name-row">
+                <div class="hero-tooltip-title">{{ tooltipHero.title }}</div>
+                <div class="hero-tooltip-name">{{ tooltipHero.displayName }}</div>
+              </div>
+              <div class="hero-tooltip-price">
+                <i class="hero-price-img2"></i>
+                {{ tooltipHero.price }}
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- 普通英雄完整显示 -->
+        <template v-else>
+          <div class="hero-tooltip-header">
+            <img :src="hero_avatar_xiao.replace('{{name}}', tooltipHero.name || tooltipHero.chessId + '.png')"
+              :alt="tooltipHero.displayName" class="hero-tooltip-image" :class="'price-tooltip-' + tooltipHero.price" />
+            <div class="hero-tooltip-info">
+              <div class="hero-tooltip-name-row">
+                <div class="hero-tooltip-title">{{ tooltipHero.title }}</div>
+                <div class="hero-tooltip-name">{{ tooltipHero.displayName }}</div>
+              </div>
+              <div class="hero-tooltip-price">
+                <i class="hero-price-img2"></i>
+                {{ tooltipHero.price }}
+              </div>
+            </div>
+          </div>
+          <div class="tooltip-layout-container">
+            <!-- 修改为行内紧凑显示结构 -->
+            <div class="tooltip-left-column">
+              <!-- 羁绊区域 -->
+              <div class="hero-traits">
+                <!-- 种族羁绊 -->
+                <div v-for="race in tooltipHero.raceId" :key="'race-'+race.raceId" class="hero-trait-row">
+                  <div class="hero-trait-item">
+                    <img :src="race.imagePath" :alt="race.name" class="trait-icon" />
+                    <span class="trait-name">{{ race.name }}</span>
+                  </div>
+                </div>
+                <!-- 职业羁绊 -->
+                <div v-for="job in tooltipHero.jobId" :key="'job-'+job.jobId" class="hero-trait-row">
+                  <div class="hero-trait-item">
+                    <img :src="job.imagePath" :alt="job.name" class="trait-icon" />
+                    <span class="trait-name">{{ job.name }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 攻击范围 -->
+              <div class="hero-rating-container">
+                <div class="hero-rating-title">攻击范围</div>
+                <div class="hero-rating-dots">
+                  <span v-for="n in 5" :key="n"
+                    :class="['hero-rating-dot', { active: n <= tooltipHero.attackRange }]"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="tooltip-divider"></div>
+          <div class="skill-info-container">
+            <div class="skill-icon-container">
+              <img :src="tooltipHero.skillImage" :alt="tooltipHero.displayName" class="hero-tooltip-skill-image" />
+            </div>
+            <div class="skill-details-container">
+              <div class="skill-name-container">
+                <div class="hero-tooltip-skill-Name">{{ tooltipHero.skillName }}</div>
+              </div>
+              <div class="skill-bottom-row">
+                <div class="skill-type-container">
+                  <div class="hero-tooltip-skill-Type">{{ tooltipHero.skillType }}</div>
+                </div>
+                <div class="skill-mana-container">
+                  <img src="./img/Mana.webp" class="hero-tooltip-skill-lan" />
+                  <div class="hero-tooltip-skill-startMagic">{{ tooltipHero.startMagic || 0 }}</div>
+                  <div class="hero-tooltip-skill-xiegang">\</div>
+                  <div class="hero-tooltip-skill-magic">{{ tooltipHero.magic || 0 }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="tooltip-divider"></div>
+          <div class="hero-tooltip-skill-Detail">{{ tooltipHero.skillDetail }}</div>
+          <div class="tooltip-divider"></div>
+          <div v-if="tooltipHero.equipId && tooltipHero.equipId.length" class="hero-tooltip-Item">
+            <div class="hero-tooltip-Item-title">推荐装备</div>
+            <div class="recommended-items-container">
+              <div v-for="item in tooltipHero.equipId" :key="item.equipId" class="recommended-item">
+                <img :src="item.imagePath" :alt="'装备 ' + item.equipId" class="recommended-item-image" />
+                <div class="equip-tooltip" v-if="item.formula">
+                  <div v-for="(formula, idx) in item.formula.split(',')" :key="idx" class="formula-item">
+                    <img :src="getEquipImage(formula)" :alt="'装备 ' + formula" class="formula-image" />
+                  </div>
+                </div>
+                <div class="hero-tooltip-Item-name">{{ item.name }}</div>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+    <div v-else>
+    </div>
+
+    <!-- 功能菜单容器，样式与data-lineup一致 -->
+    <div v-if="topMenu==='feature'" class="feature-menu-panel">
+      <div class="feature-menu-content">
+        <!-- 关闭按钮 -->
+        <button class="lineup-close-btn" @click="toggleTopMenu('feature')" title="关闭功能菜单">×</button>
+
+        <!-- 功能菜单标题 -->
+        <div class="feature-menu-header">
+          <h3>功能菜单</h3>
+        </div>
+
+        <!-- 左右分栏布局 -->
+        <div class="feature-menu-layout">
+          <!-- 左侧导航菜单 -->
+          <div class="feature-nav">
+            <div class="feature-nav-item" :class="{ active: activeFeatureTab === 'favorites' }"
+              @click="activeFeatureTab = 'favorites'">
+              <span class="nav-icon">💾</span>
+              <span class="nav-text">收藏管理</span>
+            </div>
+            <div class="feature-nav-item" :class="{ active: activeFeatureTab === 'data' }"
+              @click="activeFeatureTab = 'data'">
+              <span class="nav-icon">🗄️</span>
+              <span class="nav-text">数据管理</span>
+            </div>
+            <div class="feature-nav-item" :class="{ active: activeFeatureTab === 'settings' }"
+              @click="activeFeatureTab = 'settings'">
+              <span class="nav-icon">⚙️</span>
+              <span class="nav-text">显示设置</span>
+            </div>
+            <div class="feature-nav-item" :class="{ active: activeFeatureTab === 'tools' }"
+              @click="activeFeatureTab = 'tools'">
+              <span class="nav-icon">🛠️</span>
+              <span class="nav-text">实用工具</span>
+            </div>
+            <div class="feature-nav-item" :class="{ active: activeFeatureTab === 'help' }"
+              @click="activeFeatureTab = 'help'">
+              <span class="nav-icon">❓</span>
+              <span class="nav-text">帮助信息</span>
+            </div>
+          </div>
+
+          <!-- 右侧内容区域 -->
+          <div class="feature-content">
+            <!-- 收藏管理内容 -->
+            <div v-if="activeFeatureTab === 'favorites'" class="feature-content-panel">
+              <h4 class="content-title">收藏管理</h4>
+              <div class="feature-buttons">
+                <button class="feature-btn" @click="exportFavorites" title="将收藏数据导出为JSON文件">
+                  <span class="btn-icon">📤</span>
+                  <span class="btn-text">导出收藏</span>
+                  <span class="btn-desc">保存收藏到本地文件</span>
+                </button>
+                <button class="feature-btn" @click="importFavorites" title="从JSON文件导入收藏数据">
+                  <span class="btn-icon">📥</span>
+                  <span class="btn-text">导入收藏</span>
+                  <span class="btn-desc">从文件恢复收藏数据</span>
+                </button>
+                <button class="feature-btn" @click="cleanOutdatedFavorites" title="清理包含已删除英雄的收藏">
+                  <span class="btn-icon">🧹</span>
+                  <span class="btn-text">清理收藏</span>
+                  <span class="btn-desc">移除过时的收藏阵容</span>
+                </button>
+              </div>
+
+              <!-- 存储使用情况 -->
+              <div class="storage-info" v-if="favoriteLineups.length > 0">
+                <div class="storage-header">
+                  <span class="storage-icon">📊</span>
+                  <span class="storage-title">存储使用情况</span>
+                </div>
+                <div class="storage-details">
+                  <div class="storage-item">
+                    <span class="storage-label">收藏数量:</span>
+                    <span class="storage-value">{{ favoriteLineups.length }} 个阵容</span>
+                  </div>
+                  <div class="storage-item">
+                    <span class="storage-label">存储大小:</span>
+                    <span class="storage-value">{{ getStorageInfo().sizeMB }}MB / 4MB</span>
+                  </div>
+                  <div class="storage-item">
+                    <span class="storage-label">使用率:</span>
+                    <span class="storage-value">{{ getStorageInfo().usagePercent }}%</span>
+                  </div>
+                </div>
+                <div class="storage-progress-bar">
+                  <div class="storage-progress-fill" :style="{ width: getStorageInfo().usagePercent + '%' }"></div>
+                </div>
+              </div>
+              <div v-else class="no-favorites">
+                <span class="no-data-icon">📭</span>
+                <p>暂无收藏数据</p>
+                <p class="no-data-tip">收藏一些阵容后，这里将显示存储信息</p>
+              </div>
+            </div>
+
+            <!-- 数据管理内容 -->
+            <div v-if="activeFeatureTab === 'data'" class="feature-content-panel">
+              <h4 class="content-title">数据管理</h4>
+              <div class="feature-buttons">
+                <button class="feature-btn" @click="reloadData" title="重新加载游戏数据">
+                  <span class="btn-icon">🔄</span>
+                  <span class="btn-text">重新加载</span>
+                  <span class="btn-desc">刷新所有游戏数据</span>
+                </button>
+                <button class="feature-btn" @click="clearCache" title="清除本地缓存数据">
+                  <span class="btn-icon">🗑️</span>
+                  <span class="btn-text">清除缓存</span>
+                  <span class="btn-desc">清理临时数据，保留收藏</span>
+                </button>
+                <button class="feature-btn" @click="showSeasonInfo" title="查看当前赛季信息">
+                  <span class="btn-icon">ℹ️</span>
+                  <span class="btn-text">赛季信息</span>
+                  <span class="btn-desc">查看当前赛季详细信息</span>
+                </button>
+              </div>
+
+              <!-- 数据统计信息 -->
+              <div class="data-stats">
+                <div class="stats-header">
+                  <span class="stats-icon">📈</span>
+                  <span class="stats-title">数据统计</span>
+                </div>
+                <div class="stats-grid">
+                  <div class="stat-item">
+                    <div class="stat-number">{{ Data.current.TFTChampionData ? Data.current.TFTChampionData.length : 0
+                      }}</div>
+                    <div class="stat-label">英雄数量</div>
+
+                  </div>
+                  <div class="stat-item">
+                    <div class="stat-number">{{ ((Data.current.OPGLineupList && Data.current.OPGLineupList.length) || 0)
+                      +
+                      ((Data.current.TFTLineupList && Data.current.TFTLineupList.length) || 0) }}</div>
+                    <div class="stat-label">阵容数量</div>
+
+                  </div>
+                  <div class="stat-item">
+                    <div class="stat-number">{{ Data.current.TFTEquipData ? Data.current.TFTEquipData.length : 0 }}
+                    </div>
+                    <div class="stat-label">装备数量</div>
+
+                  </div>
+                  <div class="stat-item">
+                    <div class="stat-number">{{ favoriteLineups.length }}</div>
+                    <div class="stat-label">收藏数量</div>
+
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 显示设置内容 -->
+            <div v-if="activeFeatureTab === 'settings'" class="feature-content-panel">
+              <h4 class="content-title">显示设置</h4>
+              <div class="settings-list">
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <div class="setting-name">显示英雄名称</div>
+                    <div class="setting-desc">在英雄头像下方显示名称</div>
+
+                  </div>
+                  <label class="setting-toggle">
+                    <input type="checkbox" v-model="showHeroNames" @change="saveSettings">
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <div class="setting-name">显示装备提示</div>
+                    <div class="setting-desc">悬停装备时显示详细信息</div>
+
+                  </div>
+                  <label class="setting-toggle">
+                    <input type="checkbox" v-model="showEquipTooltips" @change="saveSettings">
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <div class="setting-name">自动保存收藏</div>
+                    <div class="setting-desc">收藏操作后自动保存到本地</div>
+
+                  </div>
+                  <label class="setting-toggle">
+                    <input type="checkbox" v-model="autoSaveFavorites" @change="saveSettings">
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- 设置操作按钮 -->
+              <div class="settings-actions">
+                <button class="feature-btn secondary" @click="resetSettings" title="恢复默认设置">
+                  <span class="btn-icon">🔄</span>
+                  <span class="btn-text">恢复默认</span>
+                </button>
+                <button class="feature-btn secondary" @click="exportSettings" title="导出设置配置">
+                  <span class="btn-icon">📋</span>
+                  <span class="btn-text">导出设置</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- 实用工具内容 -->
+            <div v-if="activeFeatureTab === 'tools'" class="feature-content-panel">
+              <h4 class="content-title">实用工具</h4>
+              <div class="feature-buttons">
+
+                <button class="feature-btn" @click="showComingSoon('阵容分析器')" title="阵容分析功能即将推出">
+                  <span class="btn-icon">📊</span>
+                  <span class="btn-text">阵容分析</span>
+                  <span class="btn-desc">分析阵容强度和搭配</span>
+                </button>
+                <button class="feature-btn" @click="showComingSoon('装备推荐器')" title="装备推荐功能即将推出">
+                  <span class="btn-icon">⚔️</span>
+                  <span class="btn-text">装备推荐</span>
+                  <span class="btn-desc">智能推荐装备搭配</span>
+                </button>
+              </div>
+
+              <!-- 工具说明 -->
+              <div class="tools-info">
+                <div class="info-header">
+                  <span class="info-icon">💡</span>
+                  <span class="info-title">工具说明</span>
+                </div>
+                <div class="info-content">
+                  <div class="info-item">
+                    <strong>站位图：</strong>可视化的棋盘工具，帮助您规划英雄站位，点击格子可以标记位置。
+                  </div>
+                  <div class="info-item">
+                    <strong>更多工具：</strong>我们正在开发更多实用工具，敬请期待！
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 帮助信息内容 -->
+            <div v-if="activeFeatureTab === 'help'" class="feature-content-panel">
+              <h4 class="content-title">帮助与信息</h4>
+              <div class="help-sections">
+                <div class="help-section">
+                  <div class="help-section-title">
+                    <span class="help-icon">📖</span>
+                    <span>使用指南</span>
+                  </div>
+                  <div class="help-buttons">
+                    <button class="help-btn" @click="showHelp">
+                      <span class="btn-icon">❓</span>
+                      <span class="btn-text">使用说明</span>
+                    </button>
+                    <button class="help-btn" @click="showShortcuts">
+                      <span class="btn-icon">⌨️</span>
+                      <span class="btn-text">快捷键</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div class="help-section">
+                  <div class="help-section-title">
+                    <span class="help-icon">📋</span>
+                    <span>应用信息</span>
+                  </div>
+                  <div class="help-buttons">
+                    <button class="help-btn" @click="showAbout">
+                      <span class="btn-icon">ℹ️</span>
+                      <span class="btn-text">关于应用</span>
+                    </button>
+                    <button class="help-btn" @click="showVersionInfo">
+                      <span class="btn-icon">🏷️</span>
+                      <span class="btn-text">版本信息</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 快速提示 -->
+              <div class="quick-tips">
+                <div class="tips-header">
+                  <span class="tips-icon">💡</span>
+                  <span class="tips-title">快速提示</span>
+                </div>
+                <div class="tips-list">
+                  <div class="tip-item">
+                    <span class="tip-key">Esc</span>
+                    <span class="tip-desc">关闭当前面板</span>
+                  </div>
+                  <div class="tip-item">
+                    <span class="tip-key">Ctrl+F</span>
+                    <span class="tip-desc">聚焦搜索框</span>
+                  </div>
+                  <div class="tip-item">
+                    <span class="tip-key">Ctrl+E</span>
+                    <span class="tip-desc">导出收藏</span>
+                  </div>
+                  <div class="tip-item">
+                    <span class="tip-key">Ctrl+R</span>
+                    <span class="tip-desc">重新加载数据</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 添加简单文本提示框 -->
+    <div class="simple-tooltip" v-show="simpleTooltipVisible" :style="simpleTooltipStyle">
+      {{ simpleTooltipText }}
+    </div>
+
+    <!-- 修改装备提示框结构，移动合成公式位置 -->
+    <div class="equip-tooltip-panel" v-show="equipTooltipVisible" :style="equipTooltipStyle">
+      <!-- 标题区域 -->
+      <div class="equip-tooltip-header">
+        <div class="equip-title-row">
+          <img :src="currentEquip.imagePath" :alt="currentEquip.name" class="equip-title-image" />
+          <div class="equip-tooltip-name">{{ currentEquip.name }}</div>
+        </div>
+      </div>
+
+      <!-- 合成公式区域 - 添加无法合成提示 -->
+      <div class="equip-recipe">
+        <div class="recipe-title">装备组合</div>
+        <div v-if="currentEquip.formula" class="recipe-container">
+          <template v-for="(formulaId, idx) in currentEquip.formula.split(',')" :key="idx">
+            <div class="recipe-item">
+              <img :src="getEquipImage(formulaId)" :alt="getEquipName(formulaId)" class="recipe-image" />
+            </div>
+            <div v-if="idx === 0" class="recipe-plus">+</div>
+          </template>
+        </div>
+        <div v-else class="recipe-empty">该装备无法合成</div>
+      </div>
+
+
+
+      <!-- 装备效果描述 -->
+      <div class="equip-effect-description" v-html="formatEquipDescription(currentEquip.effect)"></div>
+    </div>
+
+    <!-- 海克斯悬浮提示框 -->
+    <div class="hex-tooltip-panel" v-show="hexTooltipVisible" :style="hexTooltipStyle">
+      <!-- 标题区域 -->
+      <div class="hex-tooltip-header">
+        <div class="hex-title-row">
+          <img v-if="currentHex && (currentHex.imagePath || currentHex.imgUrl)"
+            :src="currentHex.imagePath || currentHex.imgUrl" :alt="currentHex.name" class="hex-title-image" />
+          <div class="hex-tooltip-name">{{ currentHex ? currentHex.name : '' }}</div>
+        </div>
+      </div>
+
+      <!-- 分割线 -->
+      <div class="tooltip-divider"></div>
+
+      <!-- 海克斯效果描述 -->
+      <div class="hex-effect" v-if="currentHex && (currentHex.description || currentHex.introduce)">
+        {{ currentHex.description || currentHex.introduce }}
+      </div>
+    </div>
+
+    <!-- 筛选面板 -->
+    <div class="filter-panel" :class="showFilterPanel ? 'visible' : 'hidden'">
+      <div class="filter-panel-header">
+        <h3>筛选条件</h3>
+        <button class="filter-close-btn" @click="showFilterPanel = false">×</button>
+      </div>
+
+      <!-- 职业筛选部分 -->
+      <div class="filter-section">
+        <h4>职业筛选</h4>
+        <div class="filter-options">
+          <div v-for="job in allJobs" :key="'job-'+job" class="filter-option"
+            :class="{ selected: selectedJobs.includes(job) }" @click="toggleJobFilter(job)">
+            <span class="filter-checkbox">
+              <span v-if="selectedJobs.includes(job)" class="checkbox-inner"></span>
+            </span>
+            <span class="filter-label">{{ job }}</span>
+          </div>
+
+          <div v-if="allJobs.length === 0" class="no-filter-options">
+            加载中或无可用选项
+          </div>
+        </div>
+      </div>
+
+      <!-- 种族/羁绊筛选部分 -->
+      <div class="filter-section">
+        <h4>羁绊筛选</h4>
+        <div class="filter-options">
+          <div v-for="race in allRaces" :key="'race-'+race" class="filter-option"
+            :class="{ selected: selectedRaces.includes(race) }" @click="toggleRaceFilter(race)">
+            <span class="filter-checkbox">
+              <span v-if="selectedRaces.includes(race)" class="checkbox-inner"></span>
+            </span>
+            <span class="filter-label">{{ race }}</span>
+          </div>
+
+          <div v-if="allRaces.length === 0" class="no-filter-options">
+            加载中或无可用选项
+          </div>
+        </div>
+      </div>
+
+      <!-- 等级筛选部分 -->
+      <div class="filter-section">
+        <h4>等级筛选</h4>
+        <div class="filter-options">
+          <div v-for="tier in allTiers" :key="'tier-'+tier" class="filter-option"
+            :class="{ selected: selectedTiers.includes(tier) }" @click="toggleTierFilter(tier)">
+            <span class="filter-checkbox">
+              <span v-if="selectedTiers.includes(tier)" class="checkbox-inner"></span>
+            </span>
+            <span class="filter-label">{{ tier }}</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+
+
+    <!-- Windows风格对话框 -->
+    <div v-if="showDialog" class="dialog-overlay" @click="closeDialog">
+      <div class="windows-dialog" @click.stop>
+        <!-- 标题栏 -->
+        <div class="dialog-titlebar">
+          <span class="dialog-title">{{ dialogTitle }}</span>
+          <button class="dialog-close-btn" @click="closeDialog">×</button>
+        </div>
+
+        <!-- 内容区域 -->
+        <div class="dialog-content">
+          <!-- 图标区域 -->
+          <div class="dialog-icon">
+            <div v-if="dialogType === 'info'" class="icon-info">ℹ️</div>
+            <div v-else-if="dialogType === 'warning'" class="icon-warning">⚠️</div>
+            <div v-else-if="dialogType === 'error'" class="icon-error">❌</div>
+            <div v-else-if="dialogType === 'confirm'" class="icon-confirm">❓</div>
+            <div v-else-if="dialogType === 'success'" class="icon-success">✅</div>
+          </div>
+
+          <!-- 消息区域 -->
+          <div class="dialog-message">
+            <div v-html="dialogMessage"></div>
+          </div>
+        </div>
+
+        <!-- 按钮区域 -->
+        <div class="dialog-buttons">
+          <button v-for="button in dialogButtons" :key="button.text" class="dialog-btn"
+            :class="button.primary ? 'btn-primary' : 'btn-secondary'" @click="handleDialogButton(button.action)">
+            {{ button.text }}
+          </button>
+        </div>
+      </div>
+    </div>
+    <script>
+      function onNative(customMsg, response) {
+        switch (customMsg) {
+          case 0x001:
+
+            window.yuanchengdata = response;
+            
+
+            break;
+
+          case 0x002:
+            console.log("这是另一个请求的响应:", response);
+            break;
+
+          default:
+            console.log("未知请求的响应:", response);
+        }
+
+
+
+
+      }
+
+    </script>
+    <script>
+      const App = {
+        data() {
+          return {
+            loading: true, // 加载状态
+            error: null, // 错误信息
+            searchText: "", // 用户搜索输入
+            hero_avatar_xiao: "",
+            hero_pic_da: "",
+            hero_pic_da_RGM: "",
+            yuanchengdata: null,
+            activeTab: "tft", // 当前激活的标签页：'opgg'或'tft' - 默认选择官方阵容
+            selectedLineup: null, // 当前选中的阵容
+            currentBoardLevel: "l9", // 当前显示的阵容等级：'l6'或'l8'
+            l9CoordinateMode: "primary", // L9阶段坐标模式：'primary'(x,y) 或 'secondary'(x2,y2)
+            Data: {
+              current: {
+                TFTChampionData: null,
+                TFTRaceData: null,
+                TFTJobData: null,
+                TFTEquipData: null,
+                TFTHexData: null,
+                TFTGoopData: null,
+                TFTLineupList: null,
+                OPGLineupList: null,
+              },
+              rgm: {
+                TFTChampionData: null,
+                TFTRaceData: null,
+                TFTJobData: null,
+                TFTEquipData: null,
+                TFTHexData: null,
+                TFTGoopData: null,
+                TFTLineupList: null,
+              },
+            },
+            showingAttributeTooltip: false,
+            attributeTooltipStyle: {
+              top: "0px",
+              left: "0px",
+            },
+            currentAttributeData: {
+              name: "",
+              imagePath: "",
+              introduce: "",
+              level: [],
+              race_color_list: "",
+              racejobID: "",
+              quanbuheros: [],
+            },
+            showLineupBoard: false, // 控制弹窗显示
+            tooltipVisible: false,
+            tooltipHero: null,
+            tooltipX: 0,
+            tooltipY: 0,
+            isPositionPanelTooltip: false, // 标识是否来自position-panel的悬浮显示
+            topMenu: '', // 新增顶部菜单状态
+            showLineupDetail: false, // 是否显示阵容详情
+            showEarlyMid: true, // 新增：前中期显示控制
+            showPositionPanel: false, // 是否显示站位图窗口
+            positionBoard: [], // 棋盘站位数据 4x7的二维数组
+            selectedPositions: new Set(), // 已选择的位置集合
+            replaceableHeroesExpanded: false, // 可替换英雄区域展开状态
+            replaceableHeroesData: [ // 可替换英雄数据
+              {
+                "hero_id": "518", // 妮蔻
+                "replace_heros": "412" // 替换英雄
+              },
+              {
+                "hero_id": "876", // 另一个英雄
+                "replace_heros": "53" // 替换英雄
+              }
+            ],
+            currentLineupPositions: [], // 当前阵容的站位数据
+            simpleTooltipVisible: false,
+            simpleTooltipText: '',
+            simpleTooltipStyle: {
+              top: '0px',
+              left: '0px'
+            },
+            currentEquip: {
+              name: '',
+              imagePath: '',
+              effect: '',
+              formula: ''
+            },
+            equipTooltipVisible: false,
+            equipTooltipStyle: {
+              top: '0px',
+              left: '0px'
+            },
+            // 海克斯悬浮提示框相关
+            currentHex: {
+              name: '',
+              imagePath: '',
+              imgUrl: '',
+              description: '',
+              introduce: ''
+            },
+            hexTooltipVisible: false,
+            hexTooltipStyle: {
+              top: '0px',
+              left: '0px'
+            },
+            // 海克斯选择悬浮提示相关
+            hexStrategyTooltipVisible: false,
+            // 前期过度悬浮提示相关
+            earlyStrategyTooltipVisible: false,
+            // 装备搭配悬浮提示相关
+            equipmentStrategyTooltipVisible: false,
+            // 站位技巧悬浮提示相关
+            positionStrategyTooltipVisible: false,
+            selectedHeroes: [], // 改为数组以支持多选
+            showFilterPanel: false, // 保留：是否显示筛选面板
+            filterPanelX: 0,
+            filterPanelY: 0,
+            loadingProgress: 0, // 加载进度，0-100
+            loadingMessage: "正在加载数据", // 加载状态消息
+            selectedJobs: [], // 选中的职业
+            selectedRaces: [], // 选中的种族/羁绊
+            selectedTiers: [], // 选中的等级
+            allJobs: [], // 所有可用职业
+            allRaces: [], // 所有可用种族/羁绊
+            allTiers: ['OP', 'S', 'A', 'B', 'C', 'D'], // 所有可用等级
+            favoriteLineups: [], // 收藏的阵容列表
+            showDialog: false, // 新增：是否显示对话框
+            dialogTitle: '', // 对话框标题
+            dialogType: '', // 对话框类型：info, warning, error, confirm, success
+            dialogMessage: '', // 对话框消息
+            dialogButtons: [], // 对话框按钮配置
+            dialogCallback: null, // 对话框回调函数
+            showAllFavorites: false, // 是否显示全部收藏阵容（忽略赛季过滤）
+            showSeasonSelector: false, // 是否显示赛季选择器
+            availableSeasons: [], // 可用的赛季列表
+            selectedSeason: 'current', // 当前选择的赛季
+            showHeroNames: true, // 是否显示英雄名称
+            showEquipTooltips: true, // 是否显示装备提示
+            autoSaveFavorites: true, // 是否自动保存收藏
+            activeFeatureTab: 'favorites', // 当前激活的功能标签页
+            strategyExpanded: false, // 攻略信息区域展开状态，默认收起
+            chosenHeroExpanded: false, // 推荐天选英雄区域展开状态，默认收起
+          };
+        },
+        computed: {
+          // 检查当前L9阵容是否有备用坐标数据
+          hasL9SecondaryCoordinates() {
+            if (!this.selectedLineup || this.currentBoardLevel !== 'l9') {
+              return false;
+            }
+            const heroList = this.selectedLineup.hero_location_l9 || [];
+            // 检查是否有英雄具有非零的x2和y2坐标
+            return heroList.some(hero =>
+              hero.hasOwnProperty('x2') &&
+              hero.hasOwnProperty('y2') &&
+              hero.x2 !== 0 &&
+              hero.y2 !== 0
+            );
+          },
+          // 过滤有效的英雄数据
+          uniqueRaces() {
+            if (!this.Data.current.TFTRaceData) return [];
+            return this.Data.current.TFTRaceData.map((race) => ({
+              id: race.raceId,
+              name: race.name,
+            }));
+          },
+          // 获取所有唯一职业
+          uniqueJobs() {
+            if (!this.Data.current.TFTJobData) return [];
+            return this.Data.current.TFTJobData.map((job) => ({
+              id: job.jobId,
+              name: job.name,
+            }));
+          },
+          // 根据当前选中的标签页返回对应的阵容数据
+          currentLineupList() {
+            if (this.activeTab === "opgg") {
+              // 对OPGG阵容数据进行解压缩，确保chessData正确显示
+              const opggLineups = this.Data.current.OPGLineupList || [];
+              return opggLineups.map(lineup => this.decompressLineupData(lineup));
+            } else if (this.activeTab === "tft") {
+              // 对TFT阵容数据进行解压缩，确保chessData正确显示
+              const tftLineups = this.Data.current.TFTLineupList || [];
+              return tftLineups.map(lineup => this.decompressLineupData(lineup));
+            } else if (this.activeTab === "favorite") {
+              // 对收藏的阵容进行解压缩，恢复完整数据用于显示
+              const decompressedFavorites = (this.favoriteLineups || []).map(lineup => this.decompressLineupData(lineup));
+
+              // 根据showAllFavorites状态决定是否过滤赛季
+              if (this.showAllFavorites) {
+                return decompressedFavorites; // 显示全部收藏阵容
+              } else {
+                return this.filterFavoritesBySeason(decompressedFavorites); // 只显示当前赛季
+              }
+            }
+            return [];
+          },
+          heroDataList() {
+            if (!this.Data.current.TFTChampionData) return [];
+            return this.Data.current.TFTChampionData.filter((hero) => {
+              // 基础过滤条件
+              const validHero =
+                hero.price && hero.price !== "0" && parseInt(hero.price) > 0;
+
+              if (hero.jobs != "召唤物") {
+                ////console.log(hero.title);
+                ////console.log(hero.skillName);
+                ////console.log(hero.skillDetail)
+              }
+
+
+              return (
+                validHero
+
+              );
+            })
+              .map((hero) => ({
+                ...hero,
+                selectednapai: hero.selectednapai || false, // 添加selected属性，默认为false
+              }))
+              .sort((a, b) => parseInt(a.price) - parseInt(b.price));
+          },
+          filteredLineups() {
+            if (!this.currentLineupList) {
+              return [];
+            }
+
+            let filtered = this.currentLineupList;
+
+            // 应用搜索文本筛选
+            if (this.searchText && this.searchText.trim() !== '') {
+              const searchTerm = this.searchText.toLowerCase().trim();
+
+              filtered = filtered.filter(lineup => {
+                // 搜索阵容名称
+                if (lineup.name && lineup.name.toLowerCase().includes(searchTerm)) {
+                  return true;
+                }
+
+                // 搜索英雄关键词（中文名、英文名、别名、拼音等）
+                if (lineup.hero_keywords_l9 && lineup.hero_keywords_l9.toLowerCase().includes(searchTerm)) {
+                  return true;
+                }
+
+                // 搜索英雄职业
+                if (lineup.hero_jobs_l9 && lineup.hero_jobs_l9.toLowerCase().includes(searchTerm)) {
+                  return true;
+                }
+
+                // 搜索英雄种族/羁绊
+                if (lineup.hero_races_l9 && lineup.hero_races_l9.toLowerCase().includes(searchTerm)) {
+                  return true;
+                }
+
+                return false;
+              });
+            }
+
+            // 应用职业筛选
+            if (this.selectedJobs.length > 0) {
+              filtered = filtered.filter(lineup => {
+                if (!lineup.hero_jobs_l9) return false;
+
+                // 检查是否包含所有选中的职业
+                return this.selectedJobs.every(job =>
+                  lineup.hero_jobs_l9.includes(job)
+                );
+              });
+            }
+
+            // 应用种族/羁绊筛选
+            if (this.selectedRaces.length > 0) {
+              filtered = filtered.filter(lineup => {
+                if (!lineup.hero_races_l9) return false;
+
+                // 检查是否包含所有选中的种族/羁绊
+                return this.selectedRaces.every(race =>
+                  lineup.hero_races_l9.includes(race)
+                );
+              });
+            }
+
+            // 应用等级筛选
+            if (this.selectedTiers.length > 0) {
+              filtered = filtered.filter(lineup => {
+                if (!lineup.quality) return false;
+
+                // 检查阵容等级是否在选中的等级中
+                return this.selectedTiers.includes(lineup.quality);
+              });
+            }
+
+            return filtered;
+          },
+          uniqueJobsAndRaces() {
+            const jobs = [];
+            const races = [];
+
+            // 从TFTJobData获取职业信息
+            if (this.Data.current && this.Data.current.TFTJobData) {
+              this.Data.current.TFTJobData.forEach(job => {
+                if (job.name) jobs.push(job.name);
+              });
+            }
+
+            // 从TFTRaceData获取羁绊信息
+            if (this.Data.current && this.Data.current.TFTRaceData) {
+              this.Data.current.TFTRaceData.forEach(race => {
+                if (race.name) races.push(race.name);
+              });
+            }
+
+            return {
+              jobs: jobs.sort(),
+              races: races.sort()
+            };
+          },
+          // 判断当前是否为轮换模式
+          isRgmSeason() {
+            return this.selectedSeason === 'rgm';
+          }
+        },
+        methods: {
+          // 切换攻略信息展开/收起状态
+          toggleStrategyExpanded() {
+            this.strategyExpanded = !this.strategyExpanded;
+          },
+
+          // 切换推荐天选英雄展开/收起状态
+          toggleChosenHeroExpanded() {
+            this.chosenHeroExpanded = !this.chosenHeroExpanded;
+          },
+
+          // 检查当前阵容是否有推荐天选英雄信息
+          hasChosenHeroInfo() {
+            if (!this.selectedLineup) return false;
+
+            // 辅助函数：检查数据是否有效（不为空字符串且有内容）
+            const hasValidData = (data) => {
+              if (!data) return false;
+              if (typeof data === 'string') return data.trim() !== '';
+              if (Array.isArray(data)) return data.length > 0;
+              return false;
+            };
+
+            // 检查是否有任何阶段的推荐天选英雄数据
+            return (
+              hasValidData(this.selectedLineup.recomm_chosen_heros_early) ||
+              hasValidData(this.selectedLineup.recomm_chosen_heros_middle) ||
+              hasValidData(this.selectedLineup.recomm_chosen_heros) ||
+              hasValidData(this.selectedLineup.replace_chosen_heros)
+            );
+          },
+
+          // 获取指定阶段的推荐天选英雄数据
+          getChosenHeroData(stage) {
+            if (!this.selectedLineup) return [];
+
+            let heroIds = [];
+            let synergyIds = [];
+
+            switch (stage) {
+              case 'early':
+                heroIds = this.selectedLineup.recomm_chosen_heros_early || [];
+                synergyIds = this.selectedLineup.recomm_chosen_heros_synergy_early || [];
+                break;
+              case 'middle':
+                heroIds = this.selectedLineup.recomm_chosen_heros_middle || [];
+                synergyIds = this.selectedLineup.recomm_chosen_heros_synergy_middle || [];
+                break;
+              case 'late':
+                heroIds = this.selectedLineup.recomm_chosen_heros || [];
+                synergyIds = this.selectedLineup.recomm_chosen_heros_synergy || [];
+                break;
+              case 'replace':
+                heroIds = this.selectedLineup.replace_chosen_heros || [];
+                synergyIds = this.selectedLineup.replace_chosen_heros_synergy || [];
+                break;
+              default:
+                return [];
+            }
+
+            // 处理数据类型转换：字符串转数组，确保数据格式正确
+            const processData = (data) => {
+              if (!data) return [];
+              if (typeof data === 'string') {
+                // 如果是字符串且不为空，转换为包含单个元素的数组
+                return data.trim() !== '' ? [data.trim()] : [];
+              }
+              if (Array.isArray(data)) return data;
+              return [];
+            };
+
+            // 处理羁绊数据：根据羁绊类型提取对应的ID
+            const processSynergyData = (data) => {
+              if (!data) return [];
+              if (typeof data === 'string') {
+                return data.trim() !== '' ? [data.trim()] : [];
+              }
+              if (Array.isArray(data)) return data;
+              // 处理羁绊对象格式 {race: 'id'} 或 {job: 'id'}
+              if (typeof data === 'object' && data !== null) {
+                const result = [];
+                // 如果是race类型，从TFTRaceData中查找
+                if (data.race) {
+                  result.push({ type: 'race', id: data.race });
+                }
+                // 如果是job类型，从TFTJobData中查找
+                if (data.job) {
+                  result.push({ type: 'job', id: data.job });
+                }
+                return result;
+              }
+              return [];
+            };
+
+            heroIds = processData(heroIds);
+            synergyIds = processSynergyData(synergyIds);
+
+            // 将英雄ID和羁绊ID组合成完整的数据
+            const result = [];
+
+            // 处理英雄数据
+            heroIds.forEach((heroId, index) => {
+              const heroData = this.getHeroById(heroId);
+              if (heroData) {
+                let synergy = null;
+                // 处理羁绊数据
+                if (synergyIds[index]) {
+                  const synergyData = synergyIds[index];
+                  if (typeof synergyData === 'object' && synergyData.type && synergyData.id) {
+                    // 根据羁绊类型在对应的数据源中查找
+                    if (synergyData.type === 'race' && this.Data.current.TFTRaceData) {
+                      const race = this.Data.current.TFTRaceData.find(r => r.raceId === synergyData.id);
+                      if (race) synergy = { ...race, type: 'race' };
+                    } else if (synergyData.type === 'job' && this.Data.current.TFTJobData) {
+                      const job = this.Data.current.TFTJobData.find(j => j.jobId === synergyData.id);
+                      if (job) synergy = { ...job, type: 'job' };
+                    }
+                  } else {
+                    // 兼容旧的字符串格式
+                    synergy = this.getSynergyById(synergyData);
+                  }
+                }
+
+                result.push({
+                  type: 'hero',
+                  id: heroId,
+                  name: heroData.displayName || heroData.name,
+                  imagePath: heroData.name || heroData.id + '.png',
+                  synergy: synergy
+                });
+              }
+            });
+
+
+            return result;
+          },
+
+          // 根据英雄ID获取英雄数据
+          getHeroById(heroId) {
+            // 参数验证：确保heroId存在且不为空
+            if (!heroId || heroId === '' || heroId === null || heroId === undefined) {
+              return null;
+            }
+
+            if (!this.Data.current.TFTChampionData) return null;
+
+            // 安全地转换为字符串进行比较
+            const heroIdStr = String(heroId).trim();
+            if (heroIdStr === '') return null;
+
+            return this.Data.current.TFTChampionData.find(hero => hero.chessId === heroIdStr);
+          },
+
+          // 根据羁绊ID获取羁绊数据
+          getSynergyById(synergyId) {
+            // 参数验证：确保synergyId存在且不为空
+            if (!synergyId || synergyId === '' || synergyId === null || synergyId === undefined) {
+              return null;
+            }
+
+            // 安全地转换为字符串进行比较
+            const synergyIdStr = String(synergyId).trim();
+            if (synergyIdStr === '') return null;
+
+            // 先在种族数据中查找
+            if (this.Data.current.TFTRaceData) {
+              const race = this.Data.current.TFTRaceData.find(race => race.raceId === synergyIdStr);
+              if (race) return { ...race, type: 'race' };
+            }
+
+            // 再在职业数据中查找
+            if (this.Data.current.TFTJobData) {
+              const job = this.Data.current.TFTJobData.find(job => job.jobId === synergyIdStr);
+              if (job) return { ...job, type: 'job' };
+            }
+
+            return null;
+          },
+
+          // 获取英雄头像图片路径
+          getHeroImage(heroId) {
+            // 参数验证：确保heroId存在且不为空
+            if (!heroId || heroId === '' || heroId === null || heroId === undefined) {
+              return this.hero_avatar_xiao.replace('{{name}}', 'default.png');
+            }
+
+            const heroData = this.getHeroById(heroId);
+            if (heroData && heroData.imagePath) {
+              return heroData.imagePath;
+            }
+            // 如果没有imagePath，使用默认的头像路径模板
+            // 使用英雄的name属性或chessId作为文件名
+            let imageName = 'default.png';
+            if (heroData && heroData.name) {
+              imageName = heroData.name + '.png';
+            } else {
+              const safeHeroId = String(heroId).trim();
+              imageName = safeHeroId + '.png';
+            }
+            return this.hero_avatar_xiao.replace('{{name}}', imageName);
+          },
+
+          // 获取英雄的羁绊信息
+          getHeroSynergies(heroId) {
+            const heroData = this.getHeroById(heroId);
+            if (!heroData) return [];
+
+            const synergies = [];
+
+            // 获取种族羁绊
+            if (heroData.raceIds) {
+              const raceIds = heroData.raceIds.split(',');
+              raceIds.forEach(raceId => {
+                const race = this.Data.current.TFTRaceData && this.Data.current.TFTRaceData.find(r => r.raceId === raceId.trim());
+                if (race) {
+                  synergies.push({ ...race, type: 'race' });
+                }
+              });
+            }
+
+            // 获取职业羁绊
+            if (heroData.jobIds) {
+              const jobIds = heroData.jobIds.split(',');
+              jobIds.forEach(jobId => {
+                const job = this.Data.current.TFTJobData && this.Data.current.TFTJobData.find(j => j.jobId === jobId.trim());
+                if (job) {
+                  synergies.push({ ...job, type: 'job' });
+                }
+              });
+            }
+
+            return synergies;
+          },
+
+          getEquipImage(equipId) {
+            if (!this.Data.current.TFTEquipData) return "";
+            const equip = this.Data.current.TFTEquipData.find(
+              (e) => e.equipId === equipId
+            );
+            return equip ? equip.imagePath : "";
+          },
+
+          // 根据装备ID获取装备对象
+          getEquipmentById(equipId) {
+            if (!this.Data.current.TFTEquipData) return null;
+            return this.Data.current.TFTEquipData.find(
+              (e) => e.equipId === equipId
+            );
+          },
+
+          // 根据海克斯ID获取海克斯对象
+          getHexById(hexId) {
+            if (!this.Data.current.TFTHexData) return null;
+
+            // 如果是数组格式
+            if (Array.isArray(this.Data.current.TFTHexData)) {
+              return this.Data.current.TFTHexData.find(
+                (h) => h.hexId === hexId
+              );
+            }
+
+            // 如果是对象格式，遍历对象的值
+            if (typeof this.Data.current.TFTHexData === 'object') {
+              for (const key in this.Data.current.TFTHexData) {
+                const hex = this.Data.current.TFTHexData[key];
+                if (hex && hex.hexId === hexId) {
+                  return hex;
+                }
+              }
+            }
+
+            return null;
+          },
+          getHeroAvatar(hero) {
+            if (hero.chessData && hero.chessData.chessId) {
+              return this.hero_avatar_xiao.replace(
+                "{{chessId}}",
+                hero.chessData.chessId
+              );
+            }
+            return "";
+          },
+          getRelatedHeroes() {
+            if (
+              !this.Data.current.TFTChampionData ||
+              !this.currentAttributeData.racejobID
+            ) {
+              return [];
+            }
+
+            return this.Data.current.TFTChampionData.filter((hero) => {
+              // 检查英雄是否包含当前羁绊或职业
+              const hasRace =
+                hero.raceIds &&
+                hero.raceIds
+                  .split(",")
+                  .includes(this.currentAttributeData.racejobID);
+              const hasJob =
+                hero.jobIds &&
+                hero.jobIds
+                  .split(",")
+                  .includes(this.currentAttributeData.racejobID);
+              return (hasRace || hasJob) && hero.price && hero.price !== "0";
+            }).slice(0, 8); // 限制显示数量
+          },
+          getBonusCountClass(key) {
+            if (!this.currentAttributeData.race_color_list) return "";
+
+            const colorMap = {};
+            this.currentAttributeData.race_color_list
+              .split(",")
+              .forEach((item) => {
+                const [k, v] = item.split(":");
+                colorMap[k] = v;
+              });
+
+            return colorMap[key] ? `level-${colorMap[key]}` : "";
+          },
+          // 显示属性提示框
+          showAttributeTooltip(event, data, type) {
+            // 确保数据有效
+            if (!data) {
+              console.warn("属性数据无效");
+              return;
+            }
+
+            // 设置提示框数据
+            this.currentAttributeData = {
+              name: data.name || "",
+              imagePath: data.imagePath || "",
+              introduce: data.introduce || "",
+              level: data.level || [],
+              race_color_list: data.race_color_list || data.job_color_list,
+              racejobID: data.raceId || data.jobId,
+              quanbuheros: data.quanbuheros || [],
+            };
+
+            // 计算提示框位置 - 与英雄提示框并排
+            const heroTooltip = document.querySelector(".hero-tooltip");
+            if (heroTooltip) {
+              const heroTooltipRect = heroTooltip.getBoundingClientRect();
+              // 设置在英雄提示框右侧
+              this.attributeTooltipStyle = {
+                top: heroTooltipRect.top + "px",
+                left: heroTooltipRect.right + "px", // 右侧间隔20px
+                zIndex: 2000, // 确保在其他元素之上
+              };
+            }
+
+            this.showingAttributeTooltip = true;
+          },
+
+          // 隐藏属性提示框
+          hideAttributeTooltip() {
+            this.showingAttributeTooltip = false;
+          },
+          toggleHeroSelection(hero) {
+
+            // 复用selectHero方法的逻辑，保持一致性
+            this.selectHero(hero);
+
+            // 同时保持原有逻辑，更新TFTChampionData中的状态（如果需要向后兼容）
+            const index = this.Data.current.TFTChampionData.findIndex(
+              (h) => h.chessId === hero.chessId
+            );
+
+            if (index !== -1) {
+              // 根据selectedHeroes中是否存在该英雄来设置selectednapai
+              const isSelected = this.isHeroSelected(hero.chessId);
+              const updatedHero = {
+                ...hero,
+                selectednapai: isSelected, // 与selectedHeroes保持一致
+              };
+              this.Data.current.TFTChampionData.splice(index, 1, updatedHero);
+            }
+          },
+          resetSearch() {
+            this.searchText = '';
+            this.selectedJobs = [];
+            this.selectedRaces = [];
+            this.selectedTiers = [];
+            this.showFilterPanel = false; // 顺便关闭筛选面板
+          },
+          // 选择阵容并显示六边形布局
+          selectLineup(lineup) {
+            // 检查阵容是否包含已删除的英雄
+            if (lineup.hasInvalidHeroes) {
+              this.showWarningDialog(
+                '无法使用阵容',
+                `阵容"${lineup.name}"包含已删除的英雄，无法使用。<br><br>建议在收藏管理中清理过时的收藏阵容。`
+              );
+              return; // 阻止继续执行
+            }
+
+            //console.log('选择阵容:', lineup);
+            //console.log('TFTChampionData是否存在:', !!this.Data.current.TFTChampionData);
+            //console.log('TFTChampionData长度:', this.Data.current.TFTChampionData ? this.Data.current.TFTChampionData.length : 0);
+
+            // 如果是收藏的阵容且是压缩格式，先解压缩
+            let processedLineup = lineup;
+            if (this.activeTab === 'favorite') {
+              // 收藏标签页的数据已经在currentLineupList中解压缩了，直接使用
+              processedLineup = lineup;
+            }
+
+
+            //console.log('L6英雄数据:', processedLineup.hero_location_l6);
+            if (processedLineup.hero_location_l6 && processedLineup.hero_location_l6.length > 0) {
+              //console.log('第一个L6英雄:', processedLineup.hero_location_l6[0]);
+              //console.log('第一个L6英雄的所有字段:', Object.keys(processedLineup.hero_location_l6[0]));
+            }
+
+            // 输出L9阶段所有英雄的详细信息
+            if (processedLineup.hero_location_l9 && processedLineup.hero_location_l9.length > 0) {
+              //console.log('=== L9阶段所有英雄信息 ===');
+              processedLineup.hero_location_l9.forEach((hero, index) => {
+                //console.log(`L9英雄${index + 1}:`, hero);
+                //console.log(`L9英雄${index + 1}字段:`, Object.keys(hero));
+                if (hero.equipData) {
+                  //console.log(`L9英雄${index + 1}装备:`, hero.equipData);
+                } else {
+                  //console.log(`L9英雄${index + 1}无装备数据`);
+                }
+              });
+
+              // 输出原始阵容数据中的装备信息
+              //console.log('=== 原始阵容数据中的装备信息 ===');
+              const originalLineup = this.currentLineupList.find(l => l.id === lineup.id);
+              if (originalLineup && originalLineup.hero_location_l9) {
+                originalLineup.hero_location_l9.forEach((hero, index) => {
+                  //console.log(`原始L9英雄${index + 1}:`, hero);
+                  //console.log(`原始L9英雄${index + 1}字段:`, Object.keys(hero));
+                  if (hero.equipIds) {
+                    //console.log(`原始L9英雄${index + 1}装备IDs:`, hero.equipIds);
+                  } else {
+                    //console.log(`原始L9英雄${index + 1}无equipIds字段`);
+                  }
+                });
+              }
+            }
+
+            // 先清空所有选中的英雄
+            this.selectedHeroes = [];
+
+            // 选中阵容中的所有英雄
+            const lineupHeroes = [];
+
+            // 收集所有阶段的英雄
+            if (processedLineup.hero_location_l6) {
+              processedLineup.hero_location_l6.forEach(hero => {
+                if (hero.chessData && !lineupHeroes.find(h => h.chessId === hero.chessData.chessId)) {
+                  lineupHeroes.push(hero.chessData);
+                }
+              });
+            }
+
+            if (processedLineup.hero_location_l8) {
+              processedLineup.hero_location_l8.forEach(hero => {
+                if (hero.chessData && !lineupHeroes.find(h => h.chessId === hero.chessData.chessId)) {
+                  lineupHeroes.push(hero.chessData);
+                }
+              });
+            }
+
+            if (processedLineup.hero_location_l9) {
+              processedLineup.hero_location_l9.forEach(hero => {
+                if (hero.chessData && !lineupHeroes.find(h => h.chessId === hero.chessData.chessId)) {
+                  lineupHeroes.push(hero.chessData);
+                }
+              });
+            }
+
+            // 将阵容中的英雄添加到选中列表
+            this.selectedHeroes = [...lineupHeroes];
+
+            this.selectedLineup = processedLineup;
+            this.currentBoardLevel = "l9";
+            this.l9CoordinateMode = "primary"; // 每次选择阵容时重置为主坐标模式
+            this.showLineupDetail = true;
+            this.topMenu = '';
+            this.showFilterPanel = false; // 选择阵容后关闭筛选面板
+
+            // 自动打开站位图
+            this.openPositionPanelWithLineup();
+          },
+
+          // 关闭阵容详情
+          closeLineupDetail() {
+            this.showLineupDetail = false;
+            this.selectedLineup = null;
+            this.selectedHeroes = []; // 清空所有选中的英雄
+            // 同时关闭站位图
+            this.showPositionPanel = false;
+          },
+
+          // 打开站位图窗口 - 支持传入阵容数据
+          openPositionPanel(lineupData = null) {
+            this.showPositionPanel = true;
+            this.initializePositionBoard(lineupData);
+          },
+
+          // 从阵容详情窗口打开站位图
+          openPositionPanelWithLineup() {
+            if (!this.selectedLineup) return;
+
+
+            this.openPositionPanel(this.selectedLineup);
+          },
+
+          // 关闭站位图窗口
+          closePositionPanel() {
+            this.showPositionPanel = false;
+            this.currentLineupPositions = [];
+          },
+
+          // 切换站位图阶段
+          switchPositionStage(stage) {
+            this.currentBoardLevel = stage;
+            // 重新加载当前阶段的英雄位置数据
+            this.openPositionPanelWithLineup();
+          },
+
+          // 检查指定阶段是否有数据
+          hasStageData(stage) {
+            if (!this.selectedLineup) return false;
+            const stageData = this.selectedLineup[`hero_location_${stage}`];
+            return stageData && Array.isArray(stageData) && stageData.length > 0;
+          },
+
+          // 获取阶段名称
+          getStageName(stage) {
+            const stageNames = {
+              'l6': '早期',
+              'l8': '中期',
+              'l9': '最终'
+            };
+            return stageNames[stage] || stage;
+          },
+
+          // 检查当前阶段是否有有效的站位坐标
+          hasValidPositions() {
+            const heroList = this.getCurrentBoardHeroList();
+            if (!heroList || heroList.length === 0) return false;
+
+            // 检查是否有英雄具有有效的坐标（x > 0 && y > 0）
+            return heroList.some(hero => {
+              return hero.x > 0 && hero.y > 0;
+            });
+          },
+
+          // 切换L9阶段的坐标模式
+          switchL9CoordinateMode(mode) {
+            this.l9CoordinateMode = mode;
+            // 重新加载当前阶段的英雄位置数据
+            this.openPositionPanelWithLineup();
+          },
+
+          // 获取当前阶段的英雄位置数据用于站位图显示
+          getCurrentPositionHeroes() {
+            if (!this.selectedLineup) return [];
+
+            const heroList = this.getCurrentBoardHeroList();
+
+            return heroList.map(hero => {
+              if (!hero.location || typeof hero.location !== 'string') {
+                return null;
+              }
+
+              const [x, y] = hero.location.split(',').map(Number);
+              const heroData = this.getHeroDataById(hero.hero_id);
+
+              return {
+                heroId: hero.hero_id,
+                x: x,
+                y: y,
+                isCore: hero.is_carry_hero || hero.isCore || false,
+                isThreeStar: hero.numStar === 3 || hero.isThreeStar || false,
+                heroData: heroData
+              };
+            }).filter(item => item !== null);
+          },
+
+          // 计算英雄在站位图上的位置样式
+          getHeroPositionStyle(x, y) {
+            // 云顶之弈棋盘是4行7列，坐标从1开始
+            // 需要根据背景图的实际尺寸计算位置
+            const boardWidth = 100; // 背景图宽度百分比
+            const boardHeight = 100; // 背景图高度百分比
+
+            // 计算每个格子的大小（7列4行）
+            const cellWidth = boardWidth / 7;
+            const cellHeight = boardHeight / 4;
+
+            // 计算位置（x是行，y是列）
+            const left = (y - 1) * cellWidth + cellWidth / 2;
+            const top = (x - 1) * cellHeight + cellHeight / 2;
+
+            return {
+              position: 'absolute',
+              left: left + '%',
+              top: top + '%',
+              transform: 'translate(-50%, -50%)'
+            };
+          },
+
+          // 显示站位图英雄提示框
+          showPositionHeroTooltip(hero, event) {
+            if (hero.heroData) {
+              this.showHeroTooltip(hero.heroData, event);
+            }
+          },
+
+          // 隐藏站位图英雄提示框
+          hidePositionHeroTooltip() {
+            this.hideHeroTooltip();
+          },
+
+          // 初始化棋盘数据 - 支持阵容数据
+          initializePositionBoard(lineupData = null) {
+            // 清空当前站位数据
+            this.currentLineupPositions = [];
+
+            if (lineupData && Array.isArray(lineupData)) {
+              // 根据传入的阵容数据设置站位
+              lineupData.forEach(hero => {
+                if (hero.heroId && hero.x && hero.y) {
+                  // 获取英雄数据
+                  const heroData = this.getHeroDataById(hero.heroId);
+                  if (heroData) {
+                    this.currentLineupPositions.push({
+                      x: hero.x,
+                      y: hero.y,
+                      heroId: hero.heroId,
+                      heroData: heroData,
+                      equipIds: hero.equipIds || [],
+                      isCore: hero.isCore || false,
+                      isThreeStar: hero.isThreeStar || false
+                    });
+                  }
+                }
+              });
+            }
+          },
+
+          // 根据英雄ID获取英雄数据
+          getHeroDataById(heroId) {
+            if (!this.Data.current.TFTChampionData) return null;
+            return this.Data.current.TFTChampionData.find(hero => hero.chessId === heroId);
+          },
+
+          // 检查位置是否被占用
+          isPositionOccupied(row, col) {
+            return this.currentLineupPositions.some(pos => pos.x === row && pos.y === col);
+          },
+
+          // 获取指定位置的英雄数据
+          getHeroAtPosition(row, col) {
+            return this.currentLineupPositions.find(pos => pos.x === row && pos.y === col);
+          },
+
+          // 切换位置状态（保留原有功能，用于手动编辑）
+          togglePosition(row, col) {
+            const existingHero = this.getHeroAtPosition(row, col);
+            if (existingHero) {
+              // 移除该位置的英雄
+              this.currentLineupPositions = this.currentLineupPositions.filter(pos => !(pos.x === row && pos.y === col));
+            }
+            // 注意：这里不添加新英雄，因为需要选择具体的英雄
+          },
+
+          // 获取位置编号（保留原有功能）
+          getPositionNumber(row, col) {
+            const hero = this.getHeroAtPosition(row, col);
+            return hero ? hero.heroId : '';
+          },
+
+          // 根据装备ID获取装备图片
+          getEquipImageById(equipId) {
+            if (!this.Data.current.TFTEquipData) return '';
+            const equip = this.Data.current.TFTEquipData.find(e => e.equipId === equipId);
+            return equip ? equip.imagePath : '';
+          },
+
+          // 根据装备ID获取装备名称
+          getEquipNameById(equipId) {
+            if (!this.Data.current.TFTEquipData) return '';
+            const equip = this.Data.current.TFTEquipData.find(e => e.equipId === equipId);
+            return equip ? equip.name : '';
+          },
+
+          // 根据装备ID显示装备提示框
+          showEquipTooltipById(equipId, event) {
+            if (!this.Data.current.TFTEquipData) return;
+            const equip = this.Data.current.TFTEquipData.find(e => e.equipId === equipId);
+            if (equip) {
+              this.showEquipTooltip(equip, event);
+            }
+          },
+
+          // 获取指定位置的英雄数据（包含完整的英雄信息）
+          getHeroAtPosition(row, col) {
+            const hero = this.currentLineupPositions.find(h => h.x === row && h.y === col);
+            if (!hero) return null;
+
+            // 获取英雄的详细数据
+            const heroData = this.getHeroDataById(hero.heroId);
+
+            return {
+              ...hero,
+              heroData: heroData
+            };
+          },
+          getCurrentBoardHeroList() {
+            if (!this.selectedLineup) return [];
+            let heroList = [];
+            if (this.currentBoardLevel === "l6") {
+              heroList = this.selectedLineup.hero_location_l6 || [];
+            } else if (this.currentBoardLevel === "l8") {
+              heroList = this.selectedLineup.hero_location_l8 || [];
+            } else if (this.currentBoardLevel === "l9") {
+              heroList = this.selectedLineup.hero_location_l9 || [];
+
+              // 如果是L9阶段且有x2,y2数据，根据坐标模式处理数据
+              if (heroList.length > 0 && heroList[0].hasOwnProperty('x2') && heroList[0].hasOwnProperty('y2')) {
+                heroList = heroList.map(hero => {
+                  const newHero = { ...hero };
+
+                  if (this.l9CoordinateMode === 'secondary') {
+                    // 使用x2,y2坐标，但保持原有的location格式兼容性
+                    if (hero.x2 !== undefined && hero.y2 !== undefined && hero.x2 !== 0 && hero.y2 !== 0) {
+                      newHero.x = hero.x2;
+                      newHero.y = hero.y2;
+                      newHero.location = hero.x2 + ',' + hero.y2;
+                    }
+                  } else {
+                    // 使用主要坐标x,y
+                    if (hero.x !== undefined && hero.y !== undefined) {
+                      newHero.x = hero.x;
+                      newHero.y = hero.y;
+                      newHero.location = hero.x + ',' + hero.y;
+                    }
+                  }
+
+                  return newHero;
+                });
+              }
+            }
+            return heroList;
+          },
+
+          async fetchDatachushi() {
+            this.loading = true;
+            this.loadingProgress = 0;
+
+            try {
+              this.hero_avatar_xiao ="{{name}}";//删了出bug  就这样用着吧
+              // 直接读取本地 latestData.json 文件
+
+              this.loadingMessage = "正在加载数据...";
+              if (!window.yuanchengdata) {
+                console.log("等待远程数据加载...");
+                this.loadingMessage = "等待远程数据...";
+
+                // 等待数据加载，最多等待60秒
+                let retryCount = 0;
+                const maxRetries = 10*60; // 60秒，每100ms检查一次
+
+                // 使用递归的方式替代while循环，确保UI能够更新
+                const checkData = async () => {
+                  if (window.yuanchengdata) {
+                    return true;
+                  }
+                  
+                  if (retryCount >= maxRetries) {
+                    throw new Error("远程数据加载超时");
+                  }
+                  
+                  retryCount++;
+                  // 更新加载进度显示
+                  this.loadingMessage = `等待远程数据... (${Math.floor(retryCount/10)}s)`;
+                  
+                  // 使用Vue的nextTick确保UI更新
+                  await this.$nextTick();
+                  await new Promise(resolve => setTimeout(resolve, 100));
+                  
+                  return await checkData();
+                };
+                
+                await checkData();
+              }
+              this.yuanchengdata = JSON.parse(window.yuanchengdata);
+              console.log("远程数据成功加载...");
+
+
+              
+
+              // 检查是否需要显示赛季选择器
+              if (this.yuanchengdata.shifoulunhuan) {
+                // 准备可用赛季列表
+                this.availableSeasons = [];
+
+                if (this.yuanchengdata.currentSeasonInfo && this.yuanchengdata.currentSeasonInfo.stringName) {
+                  this.availableSeasons.push({
+                    key: 'current',
+                    name: this.yuanchengdata.currentSeasonInfo.stringName,
+                    data: 'currentSeasonData'
+                  });
+                }
+
+                if (this.yuanchengdata.rgmSeasonInfo && this.yuanchengdata.rgmSeasonInfo.stringName) {
+                  this.availableSeasons.push({
+                    key: 'rgm',
+                    name: this.yuanchengdata.rgmSeasonInfo.stringName,
+                    data: 'rgmSeasonData'
+                  });
+                }
+
+                // 显示赛季选择器
+                this.showSeasonSelector = true;
+                this.loading = false; // 暂停加载，等待用户选择
+                return; // 等待用户选择后再继续
+              } else {
+                // 直接使用current数据
+                this.selectedSeason = 'current';
+              }
+
+              this.loadSeasonData();
+            } catch (err) {
+              this.error = err.message;
+              this.loadingMessage = "加载失败: " + err.message;
+              console.error("错误1", this.error);
+              console.error("错误2", err);
+            } finally {
+              this.loadingProgress = 100;
+              this.loading = false;
+            }
+          },
+
+          // 加载选定赛季的数据
+          loadSeasonData() {
+            try {
+              if (this.selectedSeason === 'current') {
+                // 加载current赛季数据
+                this.Data.current.TFTChampionData = this.yuanchengdata.currentSeasonData.chessData.data;
+                this.Data.current.TFTEquipData = this.yuanchengdata.currentSeasonData.equipData.data;
+                this.Data.current.TFTRaceData = this.yuanchengdata.currentSeasonData.raceData.data;
+                this.Data.current.TFTJobData = this.yuanchengdata.currentSeasonData.jobData.data;
+                this.Data.current.TFTHexData = this.yuanchengdata.currentSeasonData.buffData.data;
+                this.Data.current.OPGLineupList = this.yuanchengdata.opGgCompsData;
+                this.Data.current.TFTLineupList = this.yuanchengdata.lineupDetaillinelistData;
+              } else if (this.selectedSeason === 'rgm') {
+                // 加载rgm赛季数据到current中（作为当前使用的数据）
+                this.Data.current.TFTChampionData = this.yuanchengdata.rgmSeasonData.chessData.data;
+                this.Data.current.TFTEquipData = this.yuanchengdata.rgmSeasonData.equipData.data;
+                this.Data.current.TFTRaceData = this.yuanchengdata.rgmSeasonData.raceData.data;
+                this.Data.current.TFTJobData = this.yuanchengdata.rgmSeasonData.jobData.data;
+                this.Data.current.TFTHexData = this.yuanchengdata.rgmSeasonData.buffData.data;
+                this.Data.current.OPGLineupList = this.yuanchengdata.opGgCompsRevivalData; // 轮换模式使用opGgCompsRevivalData数据
+                this.Data.current.TFTLineupList = this.yuanchengdata.lineupDetailrgm_lineListData;
+              }
+
+              // 同时保留rgm数据在rgm对象中（用于备份或其他用途）
+              this.Data.rgm.TFTChampionData = this.yuanchengdata.rgmSeasonData.chessData.data;
+              this.Data.rgm.TFTEquipData = this.yuanchengdata.rgmSeasonData.equipData.data;
+              this.Data.rgm.TFTRaceData = this.yuanchengdata.rgmSeasonData.raceData.data;
+              this.Data.rgm.TFTJobData = this.yuanchengdata.rgmSeasonData.jobData.data;
+              this.Data.rgm.TFTHexData = this.yuanchengdata.rgmSeasonData.buffData.data;
+              this.Data.rgm.TFTLineupList = this.yuanchengdata.lineupDetailrgm_lineListData;
+
+              // 清理原始数据
+              this.yuanchengdata = null;
+
+              // 重置阵容相关状态（切换赛季时清空之前选中的阵容）
+              this.selectedLineup = null;
+              this.showLineupDetail = false;
+
+              // 从TFTChampionData加载已选中的英雄到selectedHeroes
+              if (this.Data.current && this.Data.current.TFTChampionData) {
+                const selectedChampions = this.Data.current.TFTChampionData.filter(h => h.selectednapai);
+                this.selectedHeroes = [...selectedChampions];
+              }
+
+              // 在数据加载完成后提取所有职业和种族
+              this.extractJobsAndRaces();
+
+              // 重新验证收藏数据（在英雄数据加载完成后）
+              if (this.favoriteLineups.length > 0) {
+                this.favoriteLineups = this.validateAndCleanFavorites(this.favoriteLineups);
+              }
+
+              // 轮换模式现在支持OP.GG数据，移除自动切换限制
+              // if (this.selectedSeason === 'rgm' && this.activeTab === 'opgg') {
+              //   this.activeTab = 'tft';
+              // }
+
+              // 关闭赛季选择器
+              this.showSeasonSelector = false;
+              this.loading = false;
+
+              //console.log(`已加载 ${this.selectedSeason} 赛季数据`);
+            } catch (error) {
+              console.error('加载赛季数据失败:', error);
+              this.error = error.message;
+              this.loading = false;
+            }
+          },
+          async fetchJsonData(url) {
+            try {
+              if (!url) {
+                console.warn("URL为空，无法获取数据");
+                return null;
+              }
+
+              // 重置加载进度
+              this.loadingProgress = 0;
+              this.loadingMessage = "正在连接服务器...";
+
+              // 使用fetch API并结合Response.body和ReadableStream来获取进度
+              const response = await fetch(url, {
+                mode: "cors",
+                credentials: "same-origin",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                cache: "no-cache",
+              });
+
+              if (!response.ok) {
+                throw new Error(`请求失败: ${response.status}`);
+              }
+
+              // 获取内容总长度
+              const contentLength = response.headers.get('Content-Length');
+              const total = contentLength ? parseInt(contentLength, 10) : 0;
+              this.loadingMessage = "正在下载数据...";
+
+              // 如果服务器没有提供内容长度，则回退到模拟进度
+              if (!total) {
+                this.loadingMessage = "正在处理数据...";
+                return await response.json();
+              }
+
+              // 读取响应流并跟踪进度
+              const reader = response.body.getReader();
+              let receivedLength = 0;
+              let chunks = [];
+
+              while (true) {
+                const { done, value } = await reader.read();
+
+                if (done) {
+                  break;
+                }
+
+                chunks.push(value);
+                receivedLength += value.length;
+
+                // 更新加载进度
+                this.loadingProgress = Math.min(Math.round((receivedLength / total) * 100), 99);
+              }
+
+              // 合并所有chunks并转换为JSON
+              let chunksAll = new Uint8Array(receivedLength);
+              let position = 0;
+              for (let chunk of chunks) {
+                chunksAll.set(chunk, position);
+                position += chunk.length;
+              }
+
+              const result = new TextDecoder("utf-8").decode(chunksAll);
+              this.loadingProgress = 100;
+              this.loadingMessage = "数据解析完成";
+
+              return JSON.parse(result);
+            } catch (error) {
+              console.error("获取数据时出错:", error);
+              this.loadingMessage = "加载失败: " + error.message;
+              throw error;
+            }
+          },
+          showHeroTooltip(hero, event) {
+            // 增强英雄数据，将ID转换为完整对象
+            const enhancedHero = { ...hero };
+
+
+
+            // 处理种族数据：将racequans数组转换为完整的种族对象数组
+            if (hero.racequans && Array.isArray(hero.racequans) && this.Data.current && this.Data.current.TFTRaceData) {
+              enhancedHero.raceId = hero.racequans.map(raceId =>
+                this.Data.current.TFTRaceData.find(race => race.raceId === raceId)
+              ).filter(Boolean); // 过滤掉找不到的种族
+            }
+
+            // 处理职业数据：将jobquans数组转换为完整的职业对象数组
+            if (hero.jobquans && Array.isArray(hero.jobquans) && this.Data.current && this.Data.current.TFTJobData) {
+              enhancedHero.jobId = hero.jobquans.map(jobId =>
+                this.Data.current.TFTJobData.find(job => job.jobId === jobId)
+              ).filter(Boolean); // 过滤掉找不到的职业
+            }
+
+            // 处理装备数据：将opGgItemData数组转换为完整的装备对象数组
+            if (hero.opGgItemData && Array.isArray(hero.opGgItemData) && this.Data.current && this.Data.current.TFTEquipData) {
+              enhancedHero.equipId = hero.opGgItemData.map(equipId =>
+                this.Data.current.TFTEquipData.find(equip => equip.equipId === equipId)
+              ).filter(Boolean); // 过滤掉找不到的装备
+            }
+
+            this.tooltipHero = enhancedHero;
+            this.tooltipVisible = true;
+
+            // 检测触发元素所在的容器
+            let container = '';
+            let element = event.target;
+
+            // 向上查找父元素，确定是哪个容器中的元素触发了事件
+            while (element) {
+              if (element.closest('.avatar-mode-container')) {
+                container = 'avatar-mode';
+                break;
+              } else if (element.closest('.lineup-detail-content')) {
+                container = 'top-menu';
+                break;
+              } else if (element.closest('.position-panel')) {
+                container = 'position-panel';
+                break;
+              }
+              if (element.parentElement) {
+                element = element.parentElement;
+              } else {
+                break;
+              }
+            }
+
+            // 设置是否来自position-panel的标识
+            this.isPositionPanelTooltip = (container === 'position-panel');
+
+            // 获取容器位置以计算tooltip位置
+            let x, y;
+
+
+            if (container === 'avatar-mode') {
+              // 如果是avatar-mode-container中的头像，固定在右侧
+              const avatarContainer = document.querySelector('.avatar-mode-container');
+              if (avatarContainer) {
+                const rect = avatarContainer.getBoundingClientRect();
+                x = rect.right; // 容器右侧外10px
+                y = rect.top; // 与容器顶部对齐
+                x = event.clientX + 5;
+                y = event.clientY;
+              } else {
+                // 降级处理：如果找不到容器，使用默认行为
+                x = event.clientX + 20;
+                y = event.clientY - 20;
+              }
+            } else if (container === 'top-menu') {
+              // 如果是top-menu-bar中的头像，固定在左侧
+              const menuBar = document.querySelector('.top-menu-bar');
+              if (menuBar) {
+                const rect = menuBar.getBoundingClientRect();
+                const fontSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
+                //字体乘2.6
+
+                x = event.clientX - fontSize * 3;
+                y = event.clientY;
+
+              } else {
+                // 降级处理
+                x = event.clientX + 20;
+                y = event.clientY - 20;
+              }
+            } else if (container === 'position-panel') {
+              // 如果是position-panel中的头像，固定在右侧位置
+              const positionPanel = document.querySelector('.position-panel');
+
+              if (positionPanel) {
+                const fontSize2 = parseFloat(getComputedStyle(document.documentElement).fontSize);
+
+
+                this.$nextTick(() => {
+                  const tooltipElement = document.querySelector('.hero-tooltip');
+                  if (tooltipElement) {
+                    const rect = tooltipElement.getBoundingClientRect();
+
+                    y = 11.8 * fontSize2 - rect.height; // 面板右侧外10px
+                    x = 19.95 * fontSize2; // 面板顶部下50px
+                  }
+                });
+
+
+
+              } else {
+                // 降级处理
+                x = event.clientX + 20;
+                y = event.clientY - 20;
+              }
+            } else {
+              // 默认行为：跟随鼠标
+              x = event.clientX + 20;
+              y = event.clientY - 20;
+            }
+
+            // 基础边界检查（使用动态尺寸进行精确调整）
+            if (x < 0) x = 10;
+            if (y < 0) y = 10;
+
+            // 先设置初始位置
+            this.tooltipX = x;
+            this.tooltipY = y;
+
+            // 使用nextTick确保DOM更新后获取实际尺寸并调整位置
+            this.$nextTick(() => {
+              const tooltipElement = document.querySelector('.hero-tooltip');
+              if (tooltipElement) {
+                const rect = tooltipElement.getBoundingClientRect();
+                const actualWidth = rect.width;
+                const actualHeight = rect.height;
+
+                // 重新计算位置，防止超出窗口边界
+                let adjustedX = x;
+                let adjustedY = y;
+
+                if (adjustedX + actualWidth > window.innerWidth) {
+                  adjustedX = window.innerWidth - actualWidth - 10;
+                }
+                if (adjustedX < 0) adjustedX = 10;
+
+                if (adjustedY + actualHeight > window.innerHeight) {
+                  adjustedY = window.innerHeight - actualHeight - 10;
+                }
+                if (adjustedY < 0) adjustedY = 10;
+
+                // 更新最终位置
+                this.tooltipX = adjustedX;
+                this.tooltipY = adjustedY;
+              }
+            });
+          },
+          hideHeroTooltip() {
+            this.tooltipVisible = false;
+            this.tooltipHero = null;
+            this.isPositionPanelTooltip = false; // 重置position-panel标识
+          },
+          toggleTopMenu(menu) {
+            this.topMenu = this.topMenu === menu ? '' : menu;
+
+            // 当data-lineup消失时，自动关闭filter-panel
+            if (this.topMenu !== 'lineup') {
+              this.showFilterPanel = false;
+            }
+          },
+
+          // 切换标签页并重置滚动条
+          switchTab(tabName) {
+            // 轮换模式现在支持OP.GG数据，移除限制
+            // if (this.isRgmSeason && tabName === 'opgg') {
+            //   tabName = 'tft';
+            // }
+
+            this.activeTab = tabName;
+
+            // 重置滚动条到顶部
+            this.$nextTick(() => {
+              const tabContent = document.querySelector('.tab-content');
+              if (tabContent) {
+                tabContent.scrollTop = 0;
+              }
+            });
+          },
+
+          // 切换显示全部收藏阵容
+          toggleShowAllFavorites() {
+            this.showAllFavorites = !this.showAllFavorites;
+
+            // 切换后重置滚动条到顶部
+            this.$nextTick(() => {
+              const tabContent = document.querySelector('.tab-content');
+              if (tabContent) {
+                tabContent.scrollTop = 0;
+              }
+            });
+          },
+
+          // 确认赛季选择
+          confirmSeasonSelection() {
+            if (!this.selectedSeason) return;
+
+            this.loading = true;
+            this.loadingMessage = `正在加载${this.selectedSeason === 'current' ? '当前' : '上个'}赛季数据...`;
+
+            // 延迟一下让用户看到加载状态
+            setTimeout(() => {
+              this.loadSeasonData();
+            }, 500);
+          },
+          showTooltipText(text, event) {
+            this.simpleTooltipText = text;
+            this.simpleTooltipVisible = true;
+
+            // 计算提示框位置
+            const x = event.clientX + 15;
+            const y = event.clientY - 10;
+
+            // 防止超出窗口
+            const maxX = window.innerWidth - 150;
+            const maxY = window.innerHeight - 50;
+
+            this.simpleTooltipStyle = {
+              top: Math.min(y, maxY) + 'px',
+              left: Math.min(x, maxX) + 'px',
+              position: 'fixed',
+              zIndex: 9999
+            };
+          },
+          hideTooltipText() {
+            this.simpleTooltipVisible = false;
+          },
+          showEquipTooltip(equip, event) {
+            // 确保提示框处理各种可能的装备数据格式
+            if (!equip) return; // 防止空数据错误
+
+            this.currentEquip = {
+              name: equip.name || equip.displayName || '未知装备',
+              imagePath: equip.imagePath || equip.imageUrl || '',
+              effect: equip.effect || equip.description || equip.desc || '无描述',
+              formula: equip.formula || equip.recipe || ''
+            };
+
+            this.equipTooltipVisible = true;
+
+            // 使用固定宽度和估计高度
+
+            const fontSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
+            //字体乘2.6
+
+
+            const tooltipWidth = fontSize * 3; // 增加宽度预估值，确保足够
+            const tooltipHeight = 300;
+
+            // 始终优先显示在鼠标左侧，避免右侧溢出
+            let x = event.clientX - tooltipWidth - 20; // 默认左侧偏移更多
+            let y = event.clientY - 50;
+
+            // 如果左侧空间不足，则尝试放在右侧
+            if (x < 10) {
+              x = event.clientX + 20;
+              // 如果右侧也放不下，则强制靠左显示并确保不超出左边界
+              if (x + tooltipWidth > window.innerWidth - 10) {
+                x = 10; // 靠左显示
+              }
+            }
+
+            // 防止超出窗口右侧边界，这是一个额外的检查
+            if (x + tooltipWidth > window.innerWidth - 10) {
+              x = window.innerWidth - tooltipWidth - 10;
+            }
+
+            // 防止超出窗口底部
+            if (y + tooltipHeight > window.innerHeight - 10) {
+              y = window.innerHeight - tooltipHeight - 10;
+            }
+
+            // 防止超出窗口顶部
+            if (y < 10) {
+              y = 10;
+            }
+
+            this.equipTooltipStyle = {
+              top: y + 'px',
+              left: x + 'px',
+              position: 'fixed',
+              zIndex: 9999,
+              maxWidth: (tooltipWidth - 20) + 'px' // 设置最大宽度确保内容不会超出
+            };
+          },
+          hideEquipTooltip() {
+            this.equipTooltipVisible = false;
+          },
+          // 海克斯悬浮提示框方法
+          showHexTooltip(hex, event) {
+            if (!hex) return;
+
+            // 如果传入的是字符串ID，先尝试获取海克斯数据
+            let hexData = null;
+            if (typeof hex === 'string') {
+              hexData = this.getHexById(hex);
+              if (!hexData) {
+                // 如果找不到数据，创建一个默认对象
+                hexData = {
+                  hexId: hex,
+                  name: `海克斯 ${hex}`,
+                  imagePath: '',
+                  imgUrl: '',
+                  description: '暂无描述信息',
+                  introduce: ''
+                };
+              }
+            } else {
+              // 如果传入的是对象，获取详细信息
+              hexData = this.getHexById(hex.hexId || hex.id) || hex;
+            }
+
+            this.currentHex = {
+              name: (hexData && hexData.name) || '未知海克斯',
+              imagePath: (hexData && hexData.imagePath) || (hexData && hexData.imgUrl) || '',
+              imgUrl: (hexData && hexData.imgUrl) || (hexData && hexData.imagePath) || '',
+              description: (hexData && hexData.description) || (hexData && hexData.introduce) || '无描述',
+              introduce: (hexData && hexData.introduce) || (hexData && hexData.description) || ''
+            };
+
+            this.hexTooltipVisible = true;
+
+            // 计算提示框位置
+            const fontSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
+            const tooltipWidth = fontSize * 3;
+            const tooltipHeight = 200;
+
+            let x = event.clientX - tooltipWidth - 20;
+            let y = event.clientY - 50;
+
+            if (x < 10) {
+              x = event.clientX + 20;
+              if (x + tooltipWidth > window.innerWidth - 10) {
+                x = 10;
+              }
+            }
+
+            if (x + tooltipWidth > window.innerWidth - 10) {
+              x = window.innerWidth - tooltipWidth - 10;
+            }
+
+            if (y + tooltipHeight > window.innerHeight - 10) {
+              y = window.innerHeight - tooltipHeight - 10;
+            }
+
+            if (y < 10) {
+              y = 10;
+            }
+
+            this.hexTooltipStyle = {
+              top: y + 'px',
+              left: x + 'px',
+              position: 'fixed',
+              zIndex: 9999,
+              maxWidth: (tooltipWidth - 20) + 'px'
+            };
+          },
+          hideHexTooltip() {
+            this.hexTooltipVisible = false;
+          },
+          // 海克斯选择悬浮提示方法
+          showHexStrategyTooltip(event) {
+            this.hexStrategyTooltipVisible = true;
+          },
+          hideHexStrategyTooltip() {
+            this.hexStrategyTooltipVisible = false;
+          },
+          // 前期过度悬浮提示方法
+          showEarlyStrategyTooltip(event) {
+            this.earlyStrategyTooltipVisible = true;
+          },
+          hideEarlyStrategyTooltip() {
+            this.earlyStrategyTooltipVisible = false;
+          },
+          // 装备搭配悬浮提示方法
+          showEquipmentStrategyTooltip(event) {
+            this.equipmentStrategyTooltipVisible = true;
+          },
+          hideEquipmentStrategyTooltip() {
+            this.equipmentStrategyTooltipVisible = false;
+          },
+          // 站位技巧悬浮提示方法
+          showPositionStrategyTooltip(event) {
+            this.positionStrategyTooltipVisible = true;
+          },
+          hidePositionStrategyTooltip() {
+            this.positionStrategyTooltipVisible = false;
+          },
+          getPositionInfo() {
+            if (!this.selectedLineup) return null;
+            if (this.l9CoordinateMode === 'secondary' && this.selectedLineup.location_info2) {
+              return this.selectedLineup.location_info2;
+            }
+            return this.selectedLineup.location_info;
+          },
+          getEquipName(equipId) {
+            if (!this.Data.current.TFTEquipData) return "";
+            const equip = this.Data.current.TFTEquipData.find(
+              (e) => e.equipId === equipId
+            );
+            return equip ? equip.name : "";
+          },
+          formatEquipDescription(effect) {
+            if (!effect) return '';
+
+            // 移除属性数值部分，保留主要效果描述
+            let description = effect;
+
+
+
+            // 替换\r\n为<br>
+            description = description.replace(/\r\n\r\n\r\n\r\n/g, '<br><br>');
+            description = description.replace(/\r\n/g, '<br>');
+
+            // 移除开头的空白和<br>
+            description = description.replace(/^(<br>)+/, '');
+
+            return description;
+          },
+          selectHero(hero) {
+
+
+            // 查找英雄是否已经在选中列表中
+            const index = this.selectedHeroes.findIndex(h => h.chessId === hero.chessId);
+
+            if (index !== -1) {
+              this.selectedHeroes.splice(index, 1);
+            } else {
+              this.selectedHeroes.push(hero);
+            }
+          },
+          isHeroSelected(chessId) {
+            return this.selectedHeroes.some(hero => hero.chessId === chessId);
+          },
+          toggleFilterPanel(event) {
+            // 如果打开面板，记录鼠标位置
+            if (!this.showFilterPanel) {
+              // 保存点击位置
+              this.filterPanelX = event.clientX;
+              this.filterPanelY = event.clientY;
+
+              // 添加一个延迟，确保在样式应用后再设置位置
+              setTimeout(() => {
+                const panel = document.querySelector('.filter-panel');
+                if (panel) {
+
+                  // 设置面板位置，稍微偏移以避免遮挡按钮
+                  panel.style.left = (this.filterPanelX - 20) + 'px';
+                  panel.style.top = (this.filterPanelY + 20) + 'px';
+                }
+              }, 0);
+            }
+
+            // 切换筛选面板的显示状态
+            this.showFilterPanel = !this.showFilterPanel;
+          },
+          // 切换职业选择状态
+          toggleJobFilter(job) {
+            const index = this.selectedJobs.indexOf(job);
+            if (index === -1) {
+              this.selectedJobs.push(job);
+            } else {
+              this.selectedJobs.splice(index, 1);
+            }
+          },
+
+          // 切换种族/羁绊选择状态
+          toggleRaceFilter(race) {
+            const index = this.selectedRaces.indexOf(race);
+            if (index === -1) {
+              this.selectedRaces.push(race);
+            } else {
+              this.selectedRaces.splice(index, 1);
+            }
+          },
+
+          // 切换等级选择状态
+          toggleTierFilter(tier) {
+            const index = this.selectedTiers.indexOf(tier);
+            if (index === -1) {
+              this.selectedTiers.push(tier);
+            } else {
+              this.selectedTiers.splice(index, 1);
+            }
+          },
+
+          // 重置所有筛选条件
+          resetAllFilters() {
+            this.searchText = '';
+            this.selectedJobs = [];
+            this.selectedRaces = [];
+            this.selectedTiers = [];
+            this.showFilterPanel = false;
+          },
+
+          // 在加载数据后提取所有职业和种族
+          extractJobsAndRaces() {
+            const result = this.uniqueJobsAndRaces;
+            this.allJobs = result.jobs;
+            this.allRaces = result.races;
+          },
+
+          // 收藏相关方法
+          // 检查阵容是否已收藏
+          isLineupFavorited(lineup) {
+            return this.favoriteLineups.some(fav => fav.id === lineup.id);
+          },
+
+          // 切换收藏状态
+          toggleFavorite(lineup) {
+            const index = this.favoriteLineups.findIndex(fav => fav.id === lineup.id);
+
+            if (index !== -1) {
+              // 取消收藏 - 添加二次确认
+              this.showConfirmDialog(
+                '确认取消收藏',
+                `确定要取消收藏阵容"${lineup.name}"吗？`,
+                () => {
+                  this.favoriteLineups.splice(index, 1);
+                  this.saveFavoritesToFile(); // 立即保存
+                  //console.log('取消收藏:', lineup.name, 'ID:', lineup.id);
+                }
+              );
+              return; // 等待用户确认，不继续执行后续代码
+            } else {
+              // 添加收藏 - 先压缩数据
+              const compressedLineup = this.compressLineupData(lineup);
+              compressedLineup.favoriteTime = new Date().toISOString(); // 添加收藏时间
+
+              // 临时添加到数组中以检查大小
+              const tempFavorites = [...this.favoriteLineups, compressedLineup];
+              const tempData = {
+                version: "1.0",
+                lastUpdated: new Date().toISOString(),
+                count: tempFavorites.length,
+                favorites: tempFavorites
+              };
+
+              // 检查存储大小（4MB = 4 * 1024 * 1024 bytes）
+              const dataSize = new Blob([JSON.stringify(tempData)]).size;
+              const maxSize = 4 * 1024 * 1024; // 4MB
+
+              if (dataSize > maxSize) {
+                const sizeMB = (dataSize / (1024 * 1024)).toFixed(2);
+                this.showWarningDialog(
+                  '存储空间不足',
+                  `当前收藏数据大小：${sizeMB}MB<br>最大限制：4MB<br><br>请先取消一些收藏的阵容，然后再收藏新的阵容。`
+                );
+                return;
+              }
+
+              // 添加收藏并按时间排序（最新的在前面）
+              this.favoriteLineups.push(compressedLineup);
+              this.sortFavoritesByTime();
+              //console.log('添加收藏:', lineup.name, 'ID:', lineup.id);
+            }
+
+            // 保存到本地存储
+            this.saveFavoritesToFile();
+          },
+
+          // 压缩阵容数据 - 将chessData和equipData转换为引用ID
+          compressLineupData(lineup) {
+            const compressed = { ...lineup };
+
+            // 压缩L6阵容数据
+            if (compressed.hero_location_l6) {
+              compressed.hero_location_l6 = compressed.hero_location_l6.map(hero => ({
+                ...hero,
+                heroId: hero.chessData ? hero.chessData.chessId : null, // 只保存英雄ID
+                equipIds: hero.equipData ? hero.equipData.map(equip => equip.equipId) : [], // 只保存装备ID数组
+                // 移除原始的完整数据
+                chessData: undefined,
+                equipData: undefined
+              }));
+            }
+
+            // 压缩L8阵容数据
+            if (compressed.hero_location_l8) {
+              compressed.hero_location_l8 = compressed.hero_location_l8.map(hero => ({
+                ...hero,
+                heroId: hero.chessData ? hero.chessData.chessId : null,
+                equipIds: hero.equipData ? hero.equipData.map(equip => equip.equipId) : [],
+                chessData: undefined,
+                equipData: undefined
+              }));
+            }
+
+            // 压缩L9阵容数据
+            if (compressed.hero_location_l9) {
+              compressed.hero_location_l9 = compressed.hero_location_l9.map(hero => ({
+                ...hero,
+                heroId: hero.chessData ? hero.chessData.chessId : null,
+                equipIds: hero.equipData ? hero.equipData.map(equip => equip.equipId) : [],
+                chessData: undefined,
+                equipData: undefined
+              }));
+            }
+
+            return compressed;
+          },
+
+          // 解压缩阵容数据 - 从引用ID恢复完整的chessData和equipData
+          decompressLineupData(compressedLineup) {
+            const decompressed = { ...compressedLineup };
+
+            // 解压缩L6阵容数据
+            if (decompressed.hero_location_l6) {
+              decompressed.hero_location_l6 = decompressed.hero_location_l6.map(hero => {
+                const restoredHero = { ...hero };
+
+                // 恢复chessData
+                if (hero.heroId && this.Data.current.TFTChampionData) {
+                  restoredHero.chessData = this.Data.current.TFTChampionData.find(
+                    chess => chess.chessId === hero.heroId
+                  );
+
+                  // 添加调试信息，检查恢复的数据
+                  if (!restoredHero.chessData) {
+                    //console.warn(`无法找到英雄数据，heroId: ${hero.heroId}`);
+                  } else if (!restoredHero.chessData.name) {
+                    console.warn(`英雄数据缺少name字段:`, restoredHero.chessData);
+                  } else {
+                    ////console.log(`成功恢复英雄数据: ${restoredHero.chessData.displayName || restoredHero.chessData.name}`);
+                  }
+                }
+
+                // 恢复equipData
+                if (hero.equipIds && hero.equipIds.length > 0 && this.Data.current.TFTEquipData) {
+                  restoredHero.equipData = hero.equipIds.map(equipId =>
+                    this.Data.current.TFTEquipData.find(equip => equip.equipId === equipId)
+                  ).filter(Boolean); // 过滤掉找不到的装备
+                }
+
+                // 清理临时字段
+                delete restoredHero.heroId;
+                delete restoredHero.equipIds;
+
+                return restoredHero;
+              });
+            }
+
+            // 解压缩L8阵容数据
+            if (decompressed.hero_location_l8) {
+              decompressed.hero_location_l8 = decompressed.hero_location_l8.map(hero => {
+                const restoredHero = { ...hero };
+
+                if (hero.heroId && this.Data.current.TFTChampionData) {
+                  restoredHero.chessData = this.Data.current.TFTChampionData.find(
+                    chess => chess.chessId === hero.heroId
+                  );
+
+                  // 添加调试信息，检查恢复的数据
+                  if (!restoredHero.chessData) {
+                    //console.warn(`无法找到英雄数据，heroId: ${hero.heroId}`);
+                  } else if (!restoredHero.chessData.name) {
+                    console.warn(`英雄数据缺少name字段:`, restoredHero.chessData);
+                  } else {
+                    ////console.log(`成功恢复英雄数据: ${restoredHero.chessData.displayName || restoredHero.chessData.name}`);
+                  }
+                }
+
+                if (hero.equipIds && hero.equipIds.length > 0 && this.Data.current.TFTEquipData) {
+                  restoredHero.equipData = hero.equipIds.map(equipId =>
+                    this.Data.current.TFTEquipData.find(equip => equip.equipId === equipId)
+                  ).filter(Boolean);
+                }
+
+                delete restoredHero.heroId;
+                delete restoredHero.equipIds;
+
+                return restoredHero;
+              });
+            }
+
+            // 解压缩L9阵容数据
+            if (decompressed.hero_location_l9) {
+              decompressed.hero_location_l9 = decompressed.hero_location_l9.map(hero => {
+                const restoredHero = { ...hero };
+
+                if (hero.heroId && this.Data.current.TFTChampionData) {
+                  restoredHero.chessData = this.Data.current.TFTChampionData.find(
+                    chess => chess.chessId === hero.heroId
+                  );
+
+                  // 添加调试信息，检查恢复的数据
+                  if (!restoredHero.chessData) {
+                    //console.warn(`无法找到英雄数据，heroId: ${hero.heroId}`);
+                  } else if (!restoredHero.chessData.name) {
+                    console.warn(`英雄数据缺少name字段:`, restoredHero.chessData);
+                  } else {
+                    ////console.log(`成功恢复英雄数据: ${restoredHero.chessData.displayName || restoredHero.chessData.name}`);
+                  }
+                }
+
+                if (hero.equipIds && hero.equipIds.length > 0 && this.Data.current.TFTEquipData) {
+                  restoredHero.equipData = hero.equipIds.map(equipId =>
+                    this.Data.current.TFTEquipData.find(equip => equip.equipId === equipId)
+                  ).filter(Boolean);
+                }
+
+                delete restoredHero.heroId;
+                delete restoredHero.equipIds;
+
+                return restoredHero;
+              })
+            }
+
+            // 生成hero_races_l9和hero_jobs_l9字段用于筛选功能
+            if (decompressed.hero_location_l9) {
+              const raceNames = [];
+              const jobNames = [];
+
+              decompressed.hero_location_l9.forEach(hero => {
+                if (hero.chessData) {
+                  // 收集种族名称
+                  if (hero.chessData.racequans && Array.isArray(hero.chessData.racequans)) {
+                    hero.chessData.racequans.forEach(raceId => {
+                      if (this.Data.current && this.Data.current.TFTRaceData) {
+                        const race = this.Data.current.TFTRaceData.find(r => r.raceId === raceId);
+                        if (race && race.name && !raceNames.includes(race.name)) {
+                          raceNames.push(race.name);
+                        }
+                      }
+                    });
+                  }
+
+                  // 收集职业名称
+                  if (hero.chessData.jobquans && Array.isArray(hero.chessData.jobquans)) {
+                    hero.chessData.jobquans.forEach(jobId => {
+                      if (this.Data.current && this.Data.current.TFTJobData) {
+                        const job = this.Data.current.TFTJobData.find(j => j.jobId === jobId);
+                        if (job && job.name && !jobNames.includes(job.name)) {
+                          jobNames.push(job.name);
+                        }
+                      }
+                    });
+                  }
+                }
+              });
+
+              // 更新hero_races_l9和hero_jobs_l9字段
+              decompressed.hero_races_l9 = raceNames.join(',');
+              decompressed.hero_jobs_l9 = jobNames.join(',');
+            }
+
+            return decompressed;
+          },
+
+          // 获取当前赛季标识
+          getCurrentSeason() {
+            // 从当前使用的第一个阵容获取赛季信息
+            let currentSeason = null;
+
+            // 优先从OP.GG阵容获取
+            if (this.Data.current.OPGLineupList && this.Data.current.OPGLineupList.length > 0) {
+              currentSeason = this.Data.current.OPGLineupList[0].saiji;
+            }
+            // 如果OP.GG没有，从官方阵容获取
+            else if (this.Data.current.TFTLineupList && this.Data.current.TFTLineupList.length > 0) {
+              currentSeason = this.Data.current.TFTLineupList[0].saiji;
+            }
+
+            return currentSeason;
+          },
+
+          // 根据赛季过滤收藏阵容
+          filterFavoritesBySeason(favoriteLineups) {
+            const currentSeason = this.getCurrentSeason();
+
+            // 如果无法获取当前赛季，返回所有收藏阵容
+            if (!currentSeason) {
+              console.warn('无法获取当前赛季信息，显示所有收藏阵容');
+              return favoriteLineups;
+            }
+
+            // 过滤出与当前赛季匹配的收藏阵容
+            const filteredFavorites = favoriteLineups.filter(lineup => {
+              // 如果收藏阵容没有赛季信息，也显示（兼容旧数据）
+              if (!lineup.saiji) {
+                return false;
+              }
+
+              // 比较赛季是否匹配
+              return lineup.saiji === currentSeason;
+            });
+
+            // 在控制台输出过滤信息
+            if (filteredFavorites.length !== favoriteLineups.length) {
+              //console.log(`当前赛季: ${currentSeason}`);
+              //console.log(`收藏阵容总数: ${favoriteLineups.length}, 当前赛季匹配: ${filteredFavorites.length}`);
+
+              // 统计不同赛季的收藏数量
+              const seasonStats = {};
+              favoriteLineups.forEach(lineup => {
+                const season = lineup.saiji || '未知赛季';
+                seasonStats[season] = (seasonStats[season] || 0) + 1;
+              });
+              //console.log('各赛季收藏统计:', seasonStats);
+            }
+
+            return filteredFavorites;
+          },
+
+          // 保存收藏到本地文件（CEF应用专用）
+          async saveFavoritesToFile() {
+            try {
+              const favoritesData = {
+                version: "1.0",
+                lastUpdated: new Date().toISOString(),
+                count: this.favoriteLineups.length,
+                favorites: this.favoriteLineups
+              };
+
+              // 主要方案：使用 localStorage 存储
+              localStorage.setItem('tft_favorite_lineups', JSON.stringify(favoritesData));
+              //console.log('收藏数据已保存到 localStorage');
+
+            } catch (error) {
+              console.error('保存收藏到localStorage失败:', error);
+              // 如果localStorage失败，显示错误提示
+              this.showErrorDialog('保存失败', '保存收藏失败，请检查浏览器存储权限');
+            }
+          },
+
+          // 从本地存储加载收藏（主要方案：localStorage）
+          async loadFavoritesFromFile() {
+            try {
+              const saved = localStorage.getItem('tft_favorite_lineups');
+              if (saved) {
+                const data = JSON.parse(saved);
+
+                // 验证文件格式
+                if (data.favorites && Array.isArray(data.favorites)) {
+                  this.favoriteLineups = this.validateAndCleanFavorites(data.favorites);
+                  this.sortFavoritesByTime(); // 加载后排序
+                  //console.log('从 localStorage 加载收藏数据:', this.favoriteLineups.length, '个阵容');
+
+                  // 如果有收藏数据，显示加载成功信息
+                  if (this.favoriteLineups.length > 0) {
+                    //console.log(`✅ 成功加载 ${this.favoriteLineups.length} 个收藏阵容`);
+                  }
+                } else if (Array.isArray(data)) {
+                  // 兼容旧格式（直接是数组）
+                  this.favoriteLineups = this.validateAndCleanFavorites(data);
+                  this.sortFavoritesByTime(); // 加载后排序
+                  //console.log('从 localStorage 加载收藏数据（旧格式）:', this.favoriteLineups.length, '个阵容');
+                } else {
+                  console.warn('localStorage 中的收藏数据格式不正确');
+                  this.favoriteLineups = [];
+                }
+              } else {
+                //console.log('localStorage 中没有收藏数据');
+                this.favoriteLineups = [];
+              }
+            } catch (error) {
+              //console.log('加载收藏数据失败:', error.message);
+              this.favoriteLineups = [];
+            }
+          },
+
+          // 验证和清理收藏数据
+          validateAndCleanFavorites(favorites) {
+            if (!this.Data.current.TFTChampionData) {
+              return favorites; // 如果英雄数据还没加载，暂时保留所有收藏
+            }
+
+            const validFavorites = [];
+            const currentHeroIds = this.Data.current.TFTChampionData.map(hero => hero.chessId);
+
+            favorites.forEach(favorite => {
+              // 确保收藏项有ID字段
+              if (!favorite.id) {
+                console.warn(`收藏阵容"${favorite.name}"缺少ID字段，将被跳过`);
+                return;
+              }
+
+              // 重置标记
+              favorite.hasInvalidHeroes = false;
+
+              // 检查阵容中的英雄是否仍然存在
+              if (favorite.hero_location_l9) {
+                // 先解压缩数据以获取正确的英雄信息
+                const decompressedFavorite = this.decompressLineupData(favorite);
+
+                const invalidHeroes = decompressedFavorite.hero_location_l9.filter(hero => {
+                  // 检查解压缩后的英雄数据是否存在
+                  return !hero.chessData;
+                });
+
+                if (invalidHeroes.length > 0) {
+                  console.warn(`收藏阵容"${favorite.name}" (ID: ${favorite.id})包含已删除的英雄:`, invalidHeroes.map(h => {
+                    // 从原始压缩数据中获取chessId用于调试
+                    const originalHero = favorite.hero_location_l9.find(orig =>
+                      orig.position === h.position
+                    );
+                    return originalHero ? originalHero.chessId : '未知英雄';
+                  }));
+                  // 标记为包含无效英雄，但仍保留
+                  favorite.hasInvalidHeroes = true;
+                }
+              }
+
+              // 检查收藏时间，如果太旧可以提示用户
+              if (favorite.favoriteTime) {
+                const favoriteDate = new Date(favorite.favoriteTime);
+                const daysSinceFavorite = (Date.now() - favoriteDate.getTime()) / (1000 * 60 * 60 * 24);
+
+                if (daysSinceFavorite > 30) { // 超过30天的收藏
+                  favorite.isOld = true;
+                }
+              }
+
+              validFavorites.push(favorite);
+            });
+
+            // 如果有无效数据，自动保存清理后的结果
+            if (validFavorites.length !== favorites.length) {
+              //console.log(`清理了 ${favorites.length - validFavorites.length} 个无效的收藏项`);
+              this.saveFavoritesToFile();
+            }
+
+            return validFavorites;
+          },
+
+          // 清理过时的收藏
+          cleanOutdatedFavorites() {
+            const originalCount = this.favoriteLineups.length;
+            this.favoriteLineups = this.favoriteLineups.filter(favorite =>
+              !favorite.hasInvalidHeroes && !favorite.isOld
+            );
+
+            const removedCount = originalCount - this.favoriteLineups.length;
+            if (removedCount > 0) {
+              this.saveFavoritesToFile();
+              //console.log(`已清理 ${removedCount} 个过时的收藏阵容`);
+              this.showInfoDialog('清理完成', `已清理 ${removedCount} 个过时的收藏阵容`);
+            } else {
+              this.showInfoDialog('清理完成', '没有发现过时的收藏阵容');
+            }
+          },
+          // 导出收藏数据（手动下载）
+          exportFavorites() {
+            if (this.favoriteLineups.length === 0) {
+              this.showWarningDialog('导出失败', '没有收藏数据可以导出');
+              return;
+            }
+
+            // 从localStorage获取完整的数据结构
+            try {
+              const saved = localStorage.getItem('tft_favorite_lineups');
+              let favoritesData;
+
+              if (saved) {
+                const data = JSON.parse(saved);
+                if (data.favorites) {
+                  // 已经是新格式
+                  favoritesData = data;
+                } else {
+                  // 旧格式，转换为新格式
+                  favoritesData = {
+                    version: "1.0",
+                    lastUpdated: new Date().toISOString(),
+                    count: this.favoriteLineups.length,
+                    favorites: this.favoriteLineups
+                  };
+                }
+              } else {
+                // 如果localStorage中没有数据，使用当前内存中的数据
+                favoritesData = {
+                  version: "1.0",
+                  lastUpdated: new Date().toISOString(),
+                  count: this.favoriteLineups.length,
+                  favorites: this.favoriteLineups
+                };
+              }
+
+              const jsonString = JSON.stringify(favoritesData, null, 2);
+              const blob = new Blob([jsonString], { type: 'application/json' });
+              const url = URL.createObjectURL(blob);
+
+              const link = document.createElement('a');
+              link.href = url;
+              link.download = 'favorites.json';
+              link.style.display = 'none';
+
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              URL.revokeObjectURL(url);
+
+              this.showSuccessDialog('导出成功', `已导出 ${this.favoriteLineups.length} 个收藏阵容到 favorites.json`);
+            } catch (error) {
+              console.error('导出失败:', error);
+              this.showErrorDialog('导出失败', '导出过程中发生错误，请重试');
+            }
+          },
+
+          // 导入收藏数据
+          importFavorites() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.style.display = 'none';
+
+            input.onchange = (event) => {
+              const file = event.target.files[0];
+              if (!file) return;
+
+              const reader = new FileReader();
+              reader.onload = (e) => {
+                try {
+                  const data = JSON.parse(e.target.result);
+
+                  if (data.favorites && Array.isArray(data.favorites)) {
+                    const importedCount = data.favorites.length;
+                    this.favoriteLineups = this.validateAndCleanFavorites(data.favorites);
+
+                    // 导入后排序
+                    this.sortFavoritesByTime();
+
+                    // 保存到localStorage
+                    this.saveFavoritesToFile();
+
+                    this.showSuccessDialog('导入成功', `成功导入 ${importedCount} 个收藏阵容`);
+                    //console.log('导入收藏数据成功:', this.favoriteLineups.length, '个阵容');
+                  } else {
+                    this.showErrorDialog('导入失败', '文件格式不正确，请选择有效的收藏文件');
+                  }
+                } catch (error) {
+                  this.showErrorDialog('导入失败', '文件解析失败，请检查文件格式');
+                  console.error('导入失败:', error);
+                }
+              };
+
+              reader.readAsText(file);
+              document.body.removeChild(input);
+            };
+
+            document.body.appendChild(input);
+            input.click();
+          },
+
+          // 按收藏时间排序（最新的在前面）
+          sortFavoritesByTime() {
+            this.favoriteLineups.sort((a, b) => {
+              const timeA = new Date(a.favoriteTime || '1970-01-01').getTime();
+              const timeB = new Date(b.favoriteTime || '1970-01-01').getTime();
+              return timeB - timeA; // 降序排列，最新的在前面
+            });
+          },
+
+          // 获取当前收藏数据的存储大小
+          getFavoriteStorageSize() {
+            const data = {
+              version: "1.0",
+              lastUpdated: new Date().toISOString(),
+              count: this.favoriteLineups.length,
+              favorites: this.favoriteLineups
+            };
+            return new Blob([JSON.stringify(data)]).size;
+          },
+
+          // 获取存储使用情况
+          getStorageInfo() {
+            const currentSize = this.getFavoriteStorageSize();
+            const maxSize = 4 * 1024 * 1024; // 4MB
+            const usagePercent = ((currentSize / maxSize) * 100).toFixed(1);
+            const sizeMB = (currentSize / (1024 * 1024)).toFixed(2);
+
+            return {
+              currentSize,
+              maxSize,
+              usagePercent,
+              sizeMB,
+              count: this.favoriteLineups.length
+            };
+          },
+
+          // 获取压缩效果统计
+          getCompressionStats() {
+            if (this.favoriteLineups.length === 0) return null;
+
+            // 计算压缩前的大小（模拟未压缩的数据）
+            const uncompressedData = this.favoriteLineups.map(lineup => this.decompressLineupData(lineup));
+            const uncompressedSize = new Blob([JSON.stringify({
+              version: "1.0",
+              lastUpdated: new Date().toISOString(),
+              count: uncompressedData.length,
+              favorites: uncompressedData
+            })]).size;
+
+            // 当前压缩后的大小
+            const compressedSize = this.getFavoriteStorageSize();
+
+            // 计算压缩比例
+            const compressionRatio = ((uncompressedSize - compressedSize) / uncompressedSize * 100).toFixed(1);
+            const spaceSaved = ((uncompressedSize - compressedSize) / (1024 * 1024)).toFixed(2);
+
+            return {
+              uncompressedSizeMB: (uncompressedSize / (1024 * 1024)).toFixed(2),
+              compressedSizeMB: (compressedSize / (1024 * 1024)).toFixed(2),
+              compressionRatio,
+              spaceSavedMB: spaceSaved
+            };
+          },
+
+
+          // Windows风格对话框方法
+          showInfoDialog(title, message) {
+            this.dialogTitle = title;
+            this.dialogType = 'info';
+            this.dialogMessage = message;
+            this.dialogButtons = [
+              { text: '确定', action: 'ok', primary: true }
+            ];
+            this.dialogCallback = null;
+            this.showDialog = true;
+          },
+
+          showWarningDialog(title, message) {
+            this.dialogTitle = title;
+            this.dialogType = 'warning';
+            this.dialogMessage = message;
+            this.dialogButtons = [
+              { text: '确定', action: 'ok', primary: true }
+            ];
+            this.dialogCallback = null;
+            this.showDialog = true;
+          },
+
+          showErrorDialog(title, message) {
+            this.dialogTitle = title;
+            this.dialogType = 'error';
+            this.dialogMessage = message;
+            this.dialogButtons = [
+              { text: '确定', action: 'ok', primary: true }
+            ];
+            this.dialogCallback = null;
+            this.showDialog = true;
+          },
+
+          showSuccessDialog(title, message) {
+            this.dialogTitle = title;
+            this.dialogType = 'success';
+            this.dialogMessage = message;
+            this.dialogButtons = [
+              { text: '确定', action: 'ok', primary: true }
+            ];
+            this.dialogCallback = null;
+            this.showDialog = true;
+          },
+
+          showConfirmDialog(title, message, callback) {
+            this.dialogTitle = title;
+            this.dialogType = 'confirm';
+            this.dialogMessage = message;
+            this.dialogButtons = [
+              { text: '取消', action: 'cancel', primary: false },
+              { text: '确定', action: 'confirm', primary: true }
+            ];
+            this.dialogCallback = callback;
+            this.showDialog = true;
+          },
+
+          handleDialogButton(action) {
+            if (action === 'confirm' && this.dialogCallback) {
+              this.dialogCallback();
+            }
+            this.closeDialog();
+          },
+
+          closeDialog() {
+            this.showDialog = false;
+            this.dialogCallback = null;
+          },
+
+          // 功能菜单相关方法
+          reloadData() {
+            this.showConfirmDialog(
+              '重新加载数据',
+              '确定要重新加载游戏数据吗？这将清除当前选中的英雄。',
+              () => {
+                this.selectedHeroes = [];
+                this.selectedLineup = null;
+                this.showLineupDetail = false;
+                this.fetchDatachushi();
+              }
+            );
+          },
+
+          clearCache() {
+            this.showConfirmDialog(
+              '清除缓存',
+              '确定要清除本地缓存数据吗？这将删除所有临时数据但保留收藏。',
+              () => {
+                try {
+                  // 保存收藏数据
+                  const favorites = localStorage.getItem('tft_favorite_lineups');
+                  const settings = localStorage.getItem('tft_settings');
+
+                  // 清除所有localStorage数据
+                  localStorage.clear();
+
+                  // 恢复收藏和设置
+                  if (favorites) {
+                    localStorage.setItem('tft_favorite_lineups', favorites);
+                  }
+                  if (settings) {
+                    localStorage.setItem('tft_settings', settings);
+                  }
+
+                  this.showSuccessDialog('清除成功', '本地缓存已清除，收藏数据已保留');
+                } catch (error) {
+                  this.showErrorDialog('清除失败', '清除缓存时发生错误：' + error.message);
+                }
+              }
+            );
+          },
+
+          showSeasonInfo() {
+            const currentSeason = this.getCurrentSeason();
+            const seasonName = this.selectedSeason === 'current' ? '当前赛季' : '轮换赛季';
+            const heroCount = this.Data.current.TFTChampionData ? this.Data.current.TFTChampionData.length : 0;
+            const lineupCount = ((this.Data.current.OPGLineupList && this.Data.current.OPGLineupList.length) || 0) + ((this.Data.current.TFTLineupList && this.Data.current.TFTLineupList.length) || 0);
+
+            this.showInfoDialog(
+              '赛季信息',
+              `<strong>当前使用：</strong>${seasonName}<br>
+           <strong>赛季标识：</strong>${currentSeason || '未知'}<br>
+           <strong>英雄数量：</strong>${heroCount} 个<br>
+           <strong>阵容数量：</strong>${lineupCount} 个<br>
+           <strong>收藏数量：</strong>${this.favoriteLineups.length} 个`
+            );
+          },
+
+          showHelp() {
+            this.showInfoDialog(
+              '使用说明',
+              `<strong>基本操作：</strong><br>
+           • 点击英雄头像选择/取消选择英雄<br>
+           • 悬停英雄头像查看详细信息<br>
+           • 点击阵容查看详细配置<br><br>
+           <strong>阵容管理：</strong><br>
+           • OP.GG：第三方统计阵容<br>
+           • 官方：官方推荐阵容<br>
+           • 收藏：您收藏的阵容<br><br>
+           <strong>筛选功能：</strong><br>
+           • 支持英雄名称、拼音、职业、羁绊搜索<br>
+           • 可按职业、羁绊、等级筛选阵容<br><br>
+           <strong>收藏功能：</strong><br>
+           • 点击心形图标收藏/取消收藏阵容<br>
+           • 支持导入/导出收藏数据`
+            );
+          },
+
+          showShortcuts() {
+            this.showInfoDialog(
+              '快捷键说明',
+              `<strong>鼠标操作：</strong><br>
+           • 左键点击：选择英雄/阵容<br>
+           • 悬停：显示详细信息<br>
+           • 右键：（暂未实现）<br><br>
+           <strong>键盘快捷键：</strong><br>
+           • Esc：关闭当前面板<br>
+           • Ctrl+F：聚焦搜索框<br>
+           • Ctrl+R：重新加载数据<br>
+           • Ctrl+E：导出收藏<br>
+           • Ctrl+I：导入收藏<br><br>
+           <strong>提示：</strong><br>
+           • 大部分操作都有鼠标悬停提示<br>
+           • 长按按钮可查看详细说明`
+            );
+          },
+
+          showAbout() {
+            const version = "1.0.0";
+            const buildDate = new Date().toLocaleDateString();
+
+            this.showInfoDialog(
+              '关于应用',
+              `<strong>云顶之弈英雄画廊</strong><br>
+           版本：${version}<br>
+           构建日期：${buildDate}<br><br>
+           <strong>功能特性：</strong><br>
+           • 英雄信息查看<br>
+           • 阵容推荐与收藏<br>
+           • 智能搜索与筛选<br>
+           • 数据导入导出<br><br>
+           <strong>数据来源：</strong><br>
+           • 官方游戏数据<br>
+           • OP.GG统计数据<br><br>
+           <strong>技术栈：</strong><br>
+           • Vue.js 3<br>
+           • 原生CSS<br>
+           • LocalStorage`
+            );
+          },
+
+          // 显示即将推出功能的提示
+          showComingSoon(featureName) {
+            this.showInfoDialog(
+              '功能开发中',
+              `<strong>${featureName}</strong><br><br>
+           该功能正在开发中，敬请期待！<br><br>
+           <strong>预计功能：</strong><br>
+           ${featureName === '阵容分析器' ?
+                '• 阵容强度评估<br>• 羁绊搭配分析<br>• 对战胜率预测<br>• 装备优先级推荐' :
+                featureName === '装备推荐器' ?
+                  '• 智能装备搭配<br>• 装备优先级排序<br>• 合成路径规划<br>• 装备效果分析' :
+                  '• 更多实用功能<br>• 提升游戏体验<br>• 数据分析工具<br>• 策略建议'}<br><br>
+           <strong>开发进度：</strong> 规划中<br>
+           <strong>预计上线：</strong> 待定`
+            );
+          },
+
+          saveSettings() {
+            try {
+              const settings = {
+                showHeroNames: this.showHeroNames,
+                showEquipTooltips: this.showEquipTooltips,
+                autoSaveFavorites: this.autoSaveFavorites,
+                lastUpdated: new Date().toISOString()
+              };
+
+              localStorage.setItem('tft_settings', JSON.stringify(settings));
+              //console.log('设置已保存');
+            } catch (error) {
+              console.error('保存设置失败:', error);
+            }
+          },
+
+          loadSettings() {
+            try {
+              const saved = localStorage.getItem('tft_settings');
+              if (saved) {
+                const settings = JSON.parse(saved);
+                this.showHeroNames = settings.showHeroNames !== undefined ? settings.showHeroNames : true;
+                this.showEquipTooltips = settings.showEquipTooltips !== undefined ? settings.showEquipTooltips : true;
+                this.autoSaveFavorites = settings.autoSaveFavorites !== undefined ? settings.autoSaveFavorites : true;
+                //console.log('设置已加载');
+              }
+            } catch (error) {
+              console.error('加载设置失败:', error);
+            }
+          },
+          resetSettings() {
+            this.showHeroNames = true;
+            this.showEquipTooltips = true;
+            this.autoSaveFavorites = true;
+            this.saveSettings();
+            this.showInfoDialog('设置重置', '所有设置已恢复为默认值');
+          },
+          exportSettings() {
+            const settings = {
+              showHeroNames: this.showHeroNames,
+              showEquipTooltips: this.showEquipTooltips,
+              autoSaveFavorites: this.autoSaveFavorites
+            };
+            const jsonString = JSON.stringify(settings, null, 2);
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'settings.json';
+            link.style.display = 'none';
+
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            this.showSuccessDialog('设置导出', '设置已成功导出到 settings.json');
+          },
+
+          // 获取装备顺序数据
+          getEquipmentOrderData() {
+            if (!this.selectedLineup || !this.selectedLineup.equipment_order) {
+              return [];
+            }
+
+            const equipmentIds = this.selectedLineup.equipment_order.split(',');
+            return equipmentIds.map(id => {
+              const equipment = this.getEquipmentById(id.trim());
+              return equipment || { id: id.trim(), name: '未知装备', imagePath: '' };
+            });
+          },
+
+          // 获取推荐海克斯数据
+          getRecommendedHexData() {
+            if (!this.selectedLineup || !this.selectedLineup.hexbuff) {
+              return { primary: [], alternative: [] };
+            }
+
+            const hexbuff = this.selectedLineup.hexbuff;
+            const primary = hexbuff.recomm ? hexbuff.recomm.split(',').map(id => {
+              const hex = this.getHexById(id.trim());
+              return hex || { id: id.trim(), name: '未知海克斯', imagePath: '' };
+            }) : [];
+
+            const alternative = hexbuff.replace ? hexbuff.replace.split(',').map(id => {
+              const hex = this.getHexById(id.trim());
+              return hex || { id: id.trim(), name: '未知海克斯', imagePath: '' };
+            }) : [];
+
+            return { primary, alternative };
+          },
+
+          // 获取阵容攻略数据
+          getLineupStrategyData() {
+            if (!this.selectedLineup) {
+              return {
+                d_time: '',
+                early_info: '',
+                enemy_info: '',
+                equipment_info: '',
+                hex_info: '',
+                location_info: ''
+              };
+            }
+
+            return {
+              d_time: this.selectedLineup.d_time || '',
+              early_info: this.selectedLineup.early_info || '',
+              enemy_info: this.selectedLineup.enemy_info || '',
+              equipment_info: this.selectedLineup.equipment_info || '',
+              hex_info: this.selectedLineup.hex_info || '',
+              location_info: this.selectedLineup.location_info || ''
+            };
+          },
+
+          // 获取装备顺序列表（HTML模板中使用）
+          getEquipmentOrder(equipmentOrderString) {
+            if (!equipmentOrderString) {
+              return [];
+            }
+            return equipmentOrderString.split(',').map(id => id.trim()).filter(id => id);
+          },
+
+          // 获取海克斯列表（HTML模板中使用）
+          getHexList(hexString) {
+            if (!hexString) {
+              return [];
+            }
+            return hexString.split(',').map(id => id.trim()).filter(id => id);
+          },
+
+          // 检查是否有攻略信息（HTML模板中使用）
+          hasStrategyInfo(lineup) {
+            if (!lineup) {
+              return false;
+            }
+            return !!(lineup.d_time || lineup.early_info || lineup.enemy_info ||
+              lineup.equipment_info || lineup.hex_info || lineup.location_info);
+          },
+
+          // 切换可替换英雄展开/收起状态
+          toggleReplaceableHeroesExpanded() {
+            this.replaceableHeroesExpanded = !this.replaceableHeroesExpanded;
+          },
+
+          // 检查是否有可替换英雄数据
+          hasReplaceableHeroes() {
+            return this.selectedLineup && this.selectedLineup.hero_replace && this.selectedLineup.hero_replace.length > 0;
+          },
+
+          // 获取可替换英雄分组数据
+          getReplaceableHeroGroups() {
+            // 从selectedLineup的hero_replace字段获取数据，类似于赛季之心的实现
+            if (!this.selectedLineup || !this.selectedLineup.hero_replace || this.selectedLineup.hero_replace.length === 0) {
+              return [];
+            }
+
+            return this.selectedLineup.hero_replace.map(group => {
+              // 解析原英雄ID
+              const originalHeroIds = group.hero_id ? group.hero_id.split(',').map(id => id.trim()).filter(id => id) : [];
+
+              // 解析替换英雄ID
+              const replacementHeroIds = group.replace_heros ? group.replace_heros.split(',').map(id => id.trim()).filter(id => id) : [];
+
+              return {
+                original: originalHeroIds,
+                replacement: replacementHeroIds
+              };
+            });
+          },
+        },
+
+        // 挂载时自动调用 fetchDatachushi 方法
+        mounted() {
+          console.log("调用成功");
+          window.mbQuery(0x001, "getdata", onNative);
+         
+          console.log("调用成功");
+          this.fetchDatachushi();
+          this.loadFavoritesFromFile(); // 加载收藏数据
+          this.loadSettings(); // 加载用户设置
+
+          // 添加全局鼠标移动监听，确保可以捕获事件
+          document.addEventListener('mousemove', (e) => {
+            // 在控制台显示鼠标位置，验证事件系统工作正常
+            // //console.log('鼠标位置:', e.clientX, e.clientY);
+          });
+
+          // 添加到mounted方法中
+          document.addEventListener('click', (e) => {
+
+          });
+
+          // 添加键盘快捷键支持
+          document.addEventListener('keydown', (e) => {
+            // Esc键关闭当前面板
+            if (e.key === 'Escape') {
+              if (this.showFilterPanel) {
+                this.showFilterPanel = false;
+              } else if (this.showLineupDetail) {
+                this.closeLineupDetail();
+              } else if (this.topMenu) {
+                this.topMenu = '';
+              }
+            }
+
+            // Ctrl+快捷键
+            if (e.ctrlKey) {
+              switch (e.key) {
+                case 'f':
+                case 'F':
+                  e.preventDefault();
+                  // 聚焦搜索框
+                  const searchInput = document.querySelector('.search-input');
+                  if (searchInput) {
+                    searchInput.focus();
+                  }
+                  break;
+                case 'r':
+                case 'R':
+                  e.preventDefault();
+                  this.reloadData();
+                  break;
+                case 'e':
+                case 'E':
+                  e.preventDefault();
+                  this.exportFavorites();
+                  break;
+                case 'i':
+                case 'I':
+                  e.preventDefault();
+                  this.importFavorites();
+                  break;
+              }
+            }
+          });
+
+          // 为stage-hero-cell添加特定调试
+          const cells = document.querySelectorAll('.stage-hero-cell');
+          cells.forEach(cell => {
+            cell.addEventListener('click', (e) => {
+              //console.log('Direct cell click:', e.target);
+            });
+          });
+        }
+      };
+      Vue.createApp(App).mount("#app");
+    </script>
+
+
+
+</body>
+
+</html>

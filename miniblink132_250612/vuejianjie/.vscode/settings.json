@@ -1,0 +1,7 @@
+{
+    "workbench.externalBrowser": "\"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe\" --disable-web-security --user-data-dir=\"C:/ChromeDevSession\" --ignore-certificate-errors --disable-web-security --allow-running-insecure-content",
+    "fiveServer.browser": [
+        
+    ],
+    "liveServer.settings.port": 5501
+}

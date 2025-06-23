@@ -1,0 +1,64 @@
+.TRAITS 羁绊数据
+.CHAMPIONS 技能数据
+.championStats 英雄排名数据
+
+api名字 .championStats[4].characterId
+前四概率 .championStats[4].top4Rate
+第一概率 .championStats[4].winRate
+平均排名 .championStats[4].avgPlacement
+被使用场次 .championStats[4].totalCount
+,其他数据均无用
+
+
+技能描述 .CHAMPIONS['TFT14_Galio'].ability.desc
+技能名 .CHAMPIONS['TFT14_Galio'].ability.name
+api英雄名 .CHAMPIONS['TFT14_Galio'].apiName
+价格 .CHAMPIONS['TFT14_Galio'].cost
+中文名 .CHAMPIONS['TFT14_Galio'].name
+
+
+护甲 .CHAMPIONS['TFT14_Galio'].stats.armor
+魔抗 .CHAMPIONS['TFT14_Galio'].stats.magicResist
+攻击速度 .CHAMPIONS['TFT14_Galio'].stats.attackSpeed
+暴击率 .CHAMPIONS['TFT14_Galio'].stats.critChance
+攻击距离 .CHAMPIONS['TFT14_Galio'].stats.range
+满法力值 .CHAMPIONS['TFT14_Galio'].stats.mana
+初始法力值 .CHAMPIONS['TFT14_Galio'].stats.initialMana
+
+一星生命值 .CHAMPIONS['TFT14_Galio'].stats.hp
+二星生命值=一星生命值*1.8
+三星生命值=二星生命值*1.8
+
+四费卡的三星要加500
+五费卡的三星要加4000
+
+攻击力*攻击速度就是秒伤
+
+一星攻击力 .CHAMPIONS['TFT14_Galio'].stats.damage
+二星攻击力=一星攻击力*1.5
+三星攻击力=二星攻击力*1.5
+
+描述他是战士还是法师 .CHAMPIONS['TFT14_Garen'].role
+
+
+
+羁绊名 .TRAITS['TFT14_StreetDemon'].name
+详细描述 .TRAITS['TFT14_StreetDemon'].desc
+数量为3时候的效果 .TRAITS['TFT14_StreetDemon'].level['3']
+这个羁绊包含的英雄名 .TRAITS['TFT14_StreetDemon'].champions[0].apiName
+
+推荐装备名字 ['RECOMMEND_ITEMS']['TFT14_Senna'][0].itemNames[0]
+
+
+decks
+CHAMPIONS
+TRAITS
+championStats
+ITEMS
+RECOMMEND_ITEMS
+itemStats
+params
+traitStats
+
+
+需要整合的数据
