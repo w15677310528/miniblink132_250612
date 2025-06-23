@@ -41,7 +41,7 @@
   <!-- 其他内容不变 -->
 
   <script src="./js/v3.2.8/vue.global.prod.js" type="text/javascript" charset="utf-8"></script>
-  <script src="http://localhost:8899/cdp.js" crossorigin="anonymous"></script>
+  <!--<script src="http://localhost:8899/cdp.js" crossorigin="anonymous"></script>-->
   <!-- 引入CSS文件 -->
   <link rel="stylesheet" href="./css/style.css" type="text/css" />
 </head>
@@ -97,7 +97,7 @@
           @mouseenter="hero.chessData && showHeroTooltip(hero.chessData, $event)" @mouseleave="hideHeroTooltip">
           <!-- 英雄头像图片 -->
           <i v-if="hero.chessData" class="hero-avatar-icon"
-            :style="{backgroundImage: 'url('hero.chessData.name')'}"></i>
+            :style="{backgroundImage: 'url(' + hero.chessData.name + ')'}"></i>
         </div>
 
         <!-- 缺失前中期阵容提示遮罩 -->

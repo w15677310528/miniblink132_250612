@@ -112,6 +112,99 @@ static int g_successfulDownloads = 0;
 static int g_skippedFiles = 0;
 static CRITICAL_SECTION g_statsLock;
 
+// 将JSON数据中的图片URL转换为相对路径
+std::string convertImageUrlsToRelativePaths(const std::string& jsonData) {
+    std::string result = jsonData;
+    
+    // 使用多个正则表达式匹配不同格式的图片URL
+    std::vector<std::string> patterns = {
+        "https?://[^\"\\s]+\\.png",           // 标准PNG URL
+        "https?://[^\"\\s]+\\.jpg",           // JPG图片
+        "https?://[^\"\\s]+\\.jpeg",          // JPEG图片
+        "\"(https?://[^\"]+\\.(png|jpg|jpeg))\"", // 带引号的图片URL
+        "'(https?://[^']+\\.(png|jpg|jpeg))'",   // 带单引号的图片URL
+    };
+    
+    for (const std::string& pattern : patterns) {
+        try {
+            std::regex imageRegex(pattern, std::regex_constants::icase);
+            std::sregex_iterator iter(result.begin(), result.end(), imageRegex);
+            std::sregex_iterator end;
+            
+            // 收集所有匹配项，避免在替换过程中迭代器失效
+            std::vector<std::pair<std::string, std::string>> replacements;
+            
+            for (; iter != end; ++iter) {
+                std::string fullMatch = iter->str();
+                std::string imageUrl;
+                
+                // 根据不同的正则表达式提取URL
+                if (iter->size() > 1) {
+                    // 有捕获组的情况
+                    imageUrl = (*iter)[1].str();
+                } else {
+                    // 没有捕获组的情况
+                    imageUrl = fullMatch;
+                }
+                
+                // 从URL中提取文件名
+                size_t lastSlash = imageUrl.find_last_of('/');
+                std::string fileName;
+                if (lastSlash != std::string::npos && lastSlash < imageUrl.length() - 1) {
+                    fileName = imageUrl.substr(lastSlash + 1);
+                    //logInfoF("从URL提取文件名: %s -> %s", imageUrl.c_str(), fileName.c_str());
+                } else {
+                    fileName = "unknown.png";
+                    logInfoF("无法从URL提取文件名，使用默认名称: %s -> %s", imageUrl.c_str(), fileName.c_str());
+                }
+                
+                // 从URL中提取子目录结构
+                std::string subDirectory = "";
+                if (lastSlash != std::string::npos) {
+                    // 查找倒数第二个斜杠来获取父目录名
+                    size_t secondLastSlash = imageUrl.find_last_of('/', lastSlash - 1);
+                    if (secondLastSlash != std::string::npos) {
+                        subDirectory = imageUrl.substr(secondLastSlash + 1, lastSlash - secondLastSlash - 1);
+                    }
+                }
+                
+                // 构建相对路径 (使用正斜杠避免JSON中的Unicode转义问题)
+                std::string relativePath;
+                if (!subDirectory.empty()) {
+                    relativePath = "./img/downloaded/" + subDirectory + "/" + fileName;
+                } else {
+                    relativePath = "./img/downloaded/" + fileName;
+                }
+                
+                // 根据原始匹配的格式构建替换字符串
+                std::string replacement;
+                if (fullMatch.front() == '"' && fullMatch.back() == '"') {
+                    replacement = "\"" + relativePath + "\"";
+                } else if (fullMatch.front() == '\'' && fullMatch.back() == '\'') {
+                    replacement = "'" + relativePath + "'";
+                } else {
+                    replacement = relativePath;
+                }
+                
+                replacements.push_back({fullMatch, replacement});
+            }
+            
+            // 执行替换
+            for (const auto& replacement : replacements) {
+                size_t pos = 0;
+                while ((pos = result.find(replacement.first, pos)) != std::string::npos) {
+                    result.replace(pos, replacement.first.length(), replacement.second);
+                    pos += replacement.second.length();
+                }
+            }
+            
+        } catch (const std::exception& e) {
+            logInfoF("图片URL转换正则表达式错误: %s", e.what());
+        }
+    }
+    
+    return result;
+}
 
 void downloadPngImagesFromJson(const std::string& jsonData) {
 
@@ -175,19 +268,34 @@ void downloadPngImagesFromJson(const std::string& jsonData) {
                     fileName += ".png";
                 }
                 
-                // 检查文件名是否已经处理过（去重）
-                if (processedFiles.find(fileName) != processedFiles.end()) {
-                    skippedFiles++;
-                    //logInfoF("[任务%d] [跳过] 文件名重复: %s", taskId, fileName.c_str());
-                    taskId++;
-                    continue;
+                // 从URL中提取子目录结构
+                std::string subDirectory = "";
+                if (lastSlash != std::string::npos) {
+                    // 查找倒数第二个斜杠来获取父目录名
+                    size_t secondLastSlash = imageUrl.find_last_of('/', lastSlash - 1);
+                    if (secondLastSlash != std::string::npos) {
+                        subDirectory = imageUrl.substr(secondLastSlash + 1, lastSlash - secondLastSlash - 1);
+                        //logInfoF("[任务%d] 提取子目录: %s", taskId, subDirectory.c_str());
+                    }
                 }
+                
+                // 检查文件名是否已经处理过（去重）
+           
                 
                 // 添加到已处理文件集合
                 processedFiles.insert(fileName);
                 
-                // 直接保存到vuejianjie/img/downloaded目录
-                std::string localPath = "vuejianjie\\img\\downloaded\\" + fileName;
+                // 构建包含子目录的本地路径
+                std::string localPath;
+                if (!subDirectory.empty()) {
+                    localPath = "vuejianjie\\img\\downloaded\\" + subDirectory + "\\" + fileName;
+                    // 创建子目录
+                    std::string dirPath = "vuejianjie\\img\\downloaded\\" + subDirectory;
+                    CreateDirectoryA(dirPath.c_str(), NULL);
+                    //logInfoF("[任务%d] 创建目录: %s", taskId, dirPath.c_str());
+                } else {
+                    localPath = "vuejianjie\\img\\downloaded\\" + fileName;
+                }
                 
                 // 检查文件是否已存在
                 if (GetFileAttributesA(localPath.c_str()) != INVALID_FILE_ATTRIBUTES) {
@@ -379,8 +487,28 @@ void onJsQuery(mbWebView webView, void* param,mbJsExecState es, int64_t queryId,
            return;
        }
        downloadPngImagesFromJson(jsonData);
+        
+        // 调试：保存原始JSON数据到文件
+        std::ofstream originalFile("debug_original_json.txt");
+        if (originalFile.is_open()) {
+            originalFile << jsonData;
+            originalFile.close();
+            logInfoF("原始JSON数据已保存到 debug_original_json.txt");
+        }
+        
+        // 将图片URL转换为相对路径
+        std::string modifiedJsonData = convertImageUrlsToRelativePaths(jsonData);
+        
+        // 调试：保存转换后的JSON数据到文件
+        std::ofstream modifiedFile("debug_modified_json.txt");
+        if (modifiedFile.is_open()) {
+            modifiedFile << modifiedJsonData;
+            modifiedFile.close();
+            logInfoF("转换后JSON数据已保存到 debug_modified_json.txt");
+        }
+        
         // 返回给 JS
-        mbResponseQuery(webView, queryId, customMsg, jsonData.c_str());
+        mbResponseQuery(webView, queryId, customMsg, modifiedJsonData.c_str());
     }
 }
 
