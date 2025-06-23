@@ -97,7 +97,7 @@
           @mouseenter="hero.chessData && showHeroTooltip(hero.chessData, $event)" @mouseleave="hideHeroTooltip">
           <!-- 英雄头像图片 -->
           <i v-if="hero.chessData" class="hero-avatar-icon"
-            :style="{backgroundImage: 'url(https://game.gtimg.cn/images/lol/act/img/tft/champions/' + (hero.chessData.name || hero.chessData.chessId + '.png') + ')'}"></i>
+            :style="{backgroundImage: 'url('hero.chessData.name')'}"></i>
         </div>
 
         <!-- 缺失前中期阵容提示遮罩 -->
@@ -187,7 +187,7 @@
                   :class="{ 'selected': hero.chessData && isHeroSelected(hero.chessData.chessId) }"
                   @click="hero.chessData && selectHero(hero.chessData)">
                   <img v-if="hero.chessData" class="stage-hero-avatar"
-                    :src="'https://game.gtimg.cn/images/lol/act/img/tft/champions/' + (hero.chessData.name || hero.chessData.chessId + '.png')"
+                    :src="hero.chessData.name"
                     :alt="hero.chessData.displayName" @mouseenter="showHeroTooltip(hero.chessData, $event)"
                     @mouseleave="hideHeroTooltip" />
                   <div v-else class="stage-hero-missing">已删除</div>
@@ -248,7 +248,7 @@
                   :class="{ 'selected': hero.chessData && isHeroSelected(hero.chessData.chessId) }"
                   @click="hero.chessData && selectHero(hero.chessData)">
                   <img v-if="hero.chessData" class="stage-hero-avatar"
-                    :src="'https://game.gtimg.cn/images/lol/act/img/tft/champions/' + (hero.chessData.name || hero.chessData.chessId + '.png')"
+                    :src="hero.chessData.name"
                     :alt="hero.chessData.displayName" @mouseenter="showHeroTooltip(hero.chessData, $event)"
                     @mouseleave="hideHeroTooltip" />
                   <div v-else class="stage-hero-missing">已删除</div>
@@ -297,7 +297,7 @@
                 :class="{ 'selected': hero.chessData && isHeroSelected(hero.chessData.chessId) }"
                 @click="hero.chessData && selectHero(hero.chessData)">
                 <img v-if="hero.chessData" class="stage-hero-avatar"
-                  :src="'https://game.gtimg.cn/images/lol/act/img/tft/champions/' + (hero.chessData.name || hero.chessData.chessId + '.png')"
+                  :src="hero.chessData.name"
                   :alt="hero.chessData.displayName" @mouseenter="showHeroTooltip(hero.chessData, $event)"
                   @mouseleave="hideHeroTooltip" />
                 <div v-else class="stage-hero-missing">已删除</div>
@@ -474,7 +474,7 @@
                   @mouseenter="showHeroTooltip(getHeroById(hero.id), $event)" @mouseleave="hideHeroTooltip">
                   <div class="chosen-hero-avatar-container">
                     <img class="chosen-hero-avatar"
-                      :src="'https://game.gtimg.cn/images/lol/act/img/tft/champions/' + hero.imagePath"
+                      :src="hero.imagePath"
                       :alt="hero.name" />
 
                   </div>
@@ -498,7 +498,7 @@
                   @mouseenter="showHeroTooltip(getHeroById(hero.id), $event)" @mouseleave="hideHeroTooltip">
                   <div class="chosen-hero-avatar-container">
                     <img class="chosen-hero-avatar"
-                      :src="'https://game.gtimg.cn/images/lol/act/img/tft/champions/' + hero.imagePath"
+                      :src=" hero.imagePath"
                       :alt="hero.name" />
 
                   </div>
@@ -522,7 +522,7 @@
                   @mouseenter="showHeroTooltip(getHeroById(hero.id), $event)" @mouseleave="hideHeroTooltip">
                   <div class="chosen-hero-avatar-container">
                     <img class="chosen-hero-avatar"
-                      :src="'https://game.gtimg.cn/images/lol/act/img/tft/champions/' + hero.imagePath"
+                      :src="hero.imagePath"
                       :alt="hero.name" />
 
                   </div>
@@ -546,7 +546,7 @@
                   @mouseenter="showHeroTooltip(getHeroById(hero.id), $event)" @mouseleave="hideHeroTooltip">
                   <div class="chosen-hero-avatar-container">
                     <img class="chosen-hero-avatar"
-                      :src="'https://game.gtimg.cn/images/lol/act/img/tft/champions/' + hero.imagePath"
+                      :src="hero.imagePath"
                       :alt="hero.name" />
 
                   </div>
@@ -592,7 +592,7 @@
                       @mouseenter="showHeroTooltip(getHeroById(heroId), $event)" @mouseleave="hideHeroTooltip()">
                       <div class="replaceable-hero-cell">
                         <img v-if="getHeroById(heroId)" class="replaceable-hero-avatar"
-                          :src="'https://game.gtimg.cn/images/lol/act/img/tft/champions/' + getHeroById(heroId).name"
+                          :src="getHeroById(heroId).name"
                           :alt="getHeroById(heroId).name" />
                         <div v-else class="replaceable-hero-missing">未找到</div>
                       </div>
@@ -616,7 +616,7 @@
                       @mouseleave="hideHeroTooltip()">
                       <div class="replaceable-hero-cell">
                         <img v-if="getHeroById(heroId)" class="replaceable-hero-avatar"
-                          :src="'https://game.gtimg.cn/images/lol/act/img/tft/champions/' + getHeroById(heroId).name"
+                          :src="getHeroById(heroId).name"
                           :alt="getHeroById(heroId).name" />
                         <div v-else class="replaceable-hero-missing">未找到</div>
                       </div>
