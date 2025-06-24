@@ -513,8 +513,8 @@ img {
 
 .lineup-detail-panel {
   position: fixed;
-  top: 1rem;
-  left: 19rem;
+  top: 2rem;
+  left: 16rem;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1490,7 +1490,7 @@ img {
   /* 垂直居中 */
 
 
-  width: 2.6rem;
+  width: 2.5rem;
   padding: 0.1rem;
   background-color: rgba(0, 0, 0, 0.9);
   border: 2px solid #3EBB5D;
@@ -2701,8 +2701,8 @@ img {
   bottom: -0.02rem;
   background: linear-gradient(180deg, #FFD700 0%, #FFA500 25%, #DAA520 50%, #B8860B 75%, #8B7355 100%); /* 金属渐变边框 */
   
-  -webkit-mask-image: url(//game.gtimg.cn/images/lol/tft/content-site/slot-mask-img.png);
-  mask-image: url(//game.gtimg.cn/images/lol/tft/content-site/slot-mask-img.png);
+  -webkit-mask-image: url(../img/slot-mask-img.png);
+  mask-image: url(../img/slot-mask-img.png);
   -webkit-mask-size: 100%;
   mask-size: 100%;
   z-index: 1;
@@ -2714,8 +2714,8 @@ img {
   background-repeat: no-repeat;
   background-size: .5rem .5rem;
   background-position: center;
-  -webkit-mask-image: url(//game.gtimg.cn/images/lol/tft/content-site/slot-mask-img.png);
-  mask-image: url(//game.gtimg.cn/images/lol/tft/content-site/slot-mask-img.png);
+  -webkit-mask-image: url(../img/slot-mask-img.png);
+  mask-image: url(../img/slot-mask-img.png);
   -webkit-mask-size: 100%;
   mask-size: 100%;
   position: relative;

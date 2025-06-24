@@ -6,14 +6,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>英雄画廊 - 自定义布局</title>
-    <!-- 添加缓存策略 -->
-    <meta http-equiv="Cache-Control" content="max-age=864000" />
-    <meta http-equiv="Pragma" content="cache" />
-    
-    <!-- 预加载关键图片资源 -->
-    <link rel="preload" href="./img/lineup-location-2.png" as="image">
-    <link rel="preload" href="./img/icon-carry-hero.png" as="image">
-    <link rel="preload" href="./img/Mana.webp" as="image">
+
   <script>
     //rem屏幕适应, 宽度大于2560时，字体大小为100px，宽度小于50px时，字体大小为50px 
     (function (win, doc) {
@@ -41,7 +34,7 @@
   <!-- 其他内容不变 -->
 
   <script src="./js/v3.2.8/vue.global.prod.js" type="text/javascript" charset="utf-8"></script>
-  <!--<script src="http://localhost:8899/cdp.js" crossorigin="anonymous"></script>-->
+  <script src="http://localhost:8899/cdp.js" crossorigin="anonymous"></script>
   <!-- 引入CSS文件 -->
   <link rel="stylesheet" href="./css/style.css" type="text/css" />
 </head>
@@ -91,6 +84,8 @@
 
       <!-- 站位图底图 -->
       <div class="lineup-location">
+
+        
         <!-- 英雄坐标点 -->
         <div v-for="hero in getCurrentBoardHeroList()" :key="'pos-' + hero.x + '-' + hero.y" class="location-champion"
           :class="'position' + hero.x + '-' + hero.y"
@@ -1536,6 +1531,8 @@
             tooltipHero: null,
             tooltipX: 0,
             tooltipY: 0,
+            tooltipDebounceTimer: null, // 防抖定时器
+            equipTooltipDebounceTimer: null, // 装备提示防抖定时器
             isPositionPanelTooltip: false, // 标识是否来自position-panel的悬浮显示
             topMenu: '', // 新增顶部菜单状态
             showLineupDetail: false, // 是否显示阵容详情
@@ -2593,7 +2590,12 @@
                 
                 await checkData();
               }
-              this.yuanchengdata = JSON.parse(window.yuanchengdata);
+              // 检查window.yuanchengdata的类型，如果已经是对象则直接使用，否则解析JSON
+              if (typeof window.yuanchengdata === 'string') {
+                this.yuanchengdata = JSON.parse(window.yuanchengdata);
+              } else {
+                this.yuanchengdata = window.yuanchengdata;
+              }
               console.log("远程数据成功加载...");
 
 
@@ -2784,6 +2786,24 @@
             }
           },
           showHeroTooltip(hero, event) {
+            if (!hero) return;
+
+            // 防抖处理：如果频繁切换，延迟执行
+            if (this.tooltipDebounceTimer) {
+              clearTimeout(this.tooltipDebounceTimer);
+            }
+
+            // 如果是同一个英雄，直接返回避免重复计算
+            if (this.tooltipHero && this.tooltipHero.chessId === hero.chessId) {
+              return;
+            }
+
+            this.tooltipDebounceTimer = setTimeout(() => {
+              this.showHeroTooltipInternal(hero, event);
+            }, 50); // 50ms防抖延迟
+          },
+
+          showHeroTooltipInternal(hero, event) {
             // 增强英雄数据，将ID转换为完整对象
             const enhancedHero = { ...hero };
 
@@ -2941,6 +2961,12 @@
             });
           },
           hideHeroTooltip() {
+            // 清理防抖定时器
+            if (this.tooltipDebounceTimer) {
+              clearTimeout(this.tooltipDebounceTimer);
+              this.tooltipDebounceTimer = null;
+            }
+            
             this.tooltipVisible = false;
             this.tooltipHero = null;
             this.isPositionPanelTooltip = false; // 重置position-panel标识
@@ -3023,6 +3049,23 @@
             // 确保提示框处理各种可能的装备数据格式
             if (!equip) return; // 防止空数据错误
 
+            // 防抖处理
+            if (this.equipTooltipDebounceTimer) {
+              clearTimeout(this.equipTooltipDebounceTimer);
+            }
+
+            // 如果是同一个装备，直接返回
+            if (this.currentEquip && this.currentEquip.name === (equip.name || equip.displayName)) {
+              return;
+            }
+
+            this.equipTooltipDebounceTimer = setTimeout(() => {
+              this.showEquipTooltipInternal(equip, event);
+            }, 50);
+          },
+
+          showEquipTooltipInternal(equip, event) {
+
             this.currentEquip = {
               name: equip.name || equip.displayName || '未知装备',
               imagePath: equip.imagePath || equip.imageUrl || '',
@@ -3078,6 +3121,12 @@
             };
           },
           hideEquipTooltip() {
+            // 清理装备提示防抖定时器
+            if (this.equipTooltipDebounceTimer) {
+              clearTimeout(this.equipTooltipDebounceTimer);
+              this.equipTooltipDebounceTimer = null;
+            }
+            
             this.equipTooltipVisible = false;
           },
           // 海克斯悬浮提示框方法
@@ -4284,7 +4333,41 @@
         // 挂载时自动调用 fetchDatachushi 方法
         mounted() {
           console.log("调用成功");
-          window.mbQuery(0x001, "getdata", onNative);
+          
+          // 获取浏览器内核版本
+          const userAgent = navigator.userAgent;
+          const chromeMatch = userAgent.match(/Chrome\/(\d+)/);
+          
+          if (chromeMatch) {
+            const chromeVersion = parseInt(chromeMatch[1]);
+            console.log(`检测到Chrome版本: ${chromeVersion}`);
+            
+            if (chromeVersion === 137) {
+              console.log("检测到Chrome 137版本，执行特定逻辑");
+              // 读取本地debug_original_json.txt文件
+              try {
+                const xhr = new XMLHttpRequest();
+                xhr.open('GET', './debug_original_json.txt', false); // 同步请求
+                xhr.send();
+                
+                if (xhr.status === 200) {
+                  window.yuanchengdata = JSON.parse(xhr.responseText);
+                  console.log("成功读取debug_original_json.txt文件");
+                } else {
+                  console.error("读取debug_original_json.txt文件失败: HTTP状态码", xhr.status);
+                  window.yuanchengdata = null;
+                }
+              } catch (error) {
+                console.error("读取debug_original_json.txt文件失败:", error);
+                window.yuanchengdata = null;
+              }
+            }else{
+
+              window.mbQuery(0x001, "getdata", onNative);
+            }
+          }
+          
+          
          
           console.log("调用成功");
           this.fetchDatachushi();

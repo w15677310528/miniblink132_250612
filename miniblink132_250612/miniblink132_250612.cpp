@@ -487,26 +487,10 @@ void onJsQuery(mbWebView webView, void* param,mbJsExecState es, int64_t queryId,
            return;
        }
        downloadPngImagesFromJson(jsonData);
-        
-        // 调试：保存原始JSON数据到文件
-        std::ofstream originalFile("debug_original_json.txt");
-        if (originalFile.is_open()) {
-            originalFile << jsonData;
-            originalFile.close();
-            logInfoF("原始JSON数据已保存到 debug_original_json.txt");
-        }
-        
+
         // 将图片URL转换为相对路径
         std::string modifiedJsonData = convertImageUrlsToRelativePaths(jsonData);
-        
-        // 调试：保存转换后的JSON数据到文件
-        std::ofstream modifiedFile("debug_modified_json.txt");
-        if (modifiedFile.is_open()) {
-            modifiedFile << modifiedJsonData;
-            modifiedFile.close();
-            logInfoF("转换后JSON数据已保存到 debug_modified_json.txt");
-        }
-        
+
         // 返回给 JS
         mbResponseQuery(webView, queryId, customMsg, modifiedJsonData.c_str());
     }
