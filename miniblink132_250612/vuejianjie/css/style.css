@@ -513,8 +513,8 @@ img {
 
 .lineup-detail-panel {
   position: fixed;
-  top: 2rem;
-  left: 16rem;
+  top: 1rem;
+  left: 19rem;
   display: flex;
   flex-direction: column;
   align-items: center;

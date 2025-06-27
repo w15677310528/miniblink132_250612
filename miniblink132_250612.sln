@@ -1,9 +1,14 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
-VisualStudioVersion = 17.14.36109.1 d17.14
+VisualStudioVersion = 17.14.36109.1
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "miniblink132_250612", "miniblink132_250612\miniblink132_250612.vcxproj", "{E8D6B007-6A95-4473-B61F-82A6CE748E96}"
+	ProjectSection(ProjectDependencies) = postProject
+		{418E7574-7254-46CB-AD93-2380FB0BFF5F} = {418E7574-7254-46CB-AD93-2380FB0BFF5F}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "特征码获取数据", "特征码获取数据\特征码获取数据.vcxproj", "{418E7574-7254-46CB-AD93-2380FB0BFF5F}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,6 +26,14 @@ Global
 		{E8D6B007-6A95-4473-B61F-82A6CE748E96}.Release|x64.Build.0 = Release|x64
 		{E8D6B007-6A95-4473-B61F-82A6CE748E96}.Release|x86.ActiveCfg = Release|Win32
 		{E8D6B007-6A95-4473-B61F-82A6CE748E96}.Release|x86.Build.0 = Release|Win32
+		{418E7574-7254-46CB-AD93-2380FB0BFF5F}.Debug|x64.ActiveCfg = Debug|x64
+		{418E7574-7254-46CB-AD93-2380FB0BFF5F}.Debug|x64.Build.0 = Debug|x64
+		{418E7574-7254-46CB-AD93-2380FB0BFF5F}.Debug|x86.ActiveCfg = Debug|Win32
+		{418E7574-7254-46CB-AD93-2380FB0BFF5F}.Debug|x86.Build.0 = Debug|Win32
+		{418E7574-7254-46CB-AD93-2380FB0BFF5F}.Release|x64.ActiveCfg = Release|x64
+		{418E7574-7254-46CB-AD93-2380FB0BFF5F}.Release|x64.Build.0 = Release|x64
+		{418E7574-7254-46CB-AD93-2380FB0BFF5F}.Release|x86.ActiveCfg = Release|Win32
+		{418E7574-7254-46CB-AD93-2380FB0BFF5F}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

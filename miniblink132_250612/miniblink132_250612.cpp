@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <functional>
 #include "./windows.h"
+#include <windowsx.h>  // 添加GET_X_LPARAM和GET_Y_LPARAM宏定义
 #include <string.h>
 #include <fstream>
 #include <sstream>
@@ -17,12 +18,200 @@
 #include <algorithm> // 添加算法头文件，用于std::replace
 #include <curl/curl.h> // 使用libcurl替代URLDownloadToFile
 #include <set>
+#include <tlhelp32.h> // 添加进程快照相关头文件
+#include <psapi.h>    // 添加进程API头文件
 
 #pragma comment(lib, "zlib.lib")  // 链接zlib库
 #pragma comment(lib, "libcurl.lib") // 链接libcurl库
 
+// 全局变量用于存储原始窗口过程和WebView
+WNDPROC g_originalWndProc = nullptr;
+mbWebView g_mbView = 0;  // mbWebView是long long类型，使用0初始化
+
 template<typename... Args>
 void logInfoF(const char* format, Args... args);
+
+// 进程读取测试函数
+void testProcessRead() {
+    const char* processName = "League of Legends.exe";
+    DWORD processId = 0;
+    HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    
+    if (hSnapshot == INVALID_HANDLE_VALUE) {
+        logInfoF("创建进程快照失败");
+        return;
+    }
+    
+    PROCESSENTRY32 pe32;
+    pe32.dwSize = sizeof(PROCESSENTRY32);
+    
+    // 查找进程PID
+    if (Process32First(hSnapshot, &pe32)) {
+        do {
+            if (wcscmp(pe32.szExeFile, L"League of Legends.exe") == 0) {
+                processId = pe32.th32ProcessID;
+                logInfoF("找到进程 %s，PID: %d", processName, processId);
+                break;
+            }
+        } while (Process32Next(hSnapshot, &pe32));
+    }
+    
+    CloseHandle(hSnapshot);
+    
+    if (processId == 0) {
+        logInfoF("未找到进程 %s", processName);
+        return;
+    }
+    
+    // 打开进程
+    HANDLE hProcess = OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, FALSE, processId);
+    if (hProcess == NULL) {
+        logInfoF("打开进程失败，错误代码: %d", GetLastError());
+        return;
+    }
+    
+    // 获取模块地址
+    HMODULE hMods[1024];
+    DWORD cbNeeded;
+    MODULEINFO modInfo;
+    
+    if (EnumProcessModules(hProcess, hMods, sizeof(hMods), &cbNeeded)) {
+        // 获取主模块（第一个模块）信息
+        if (GetModuleInformation(hProcess, hMods[0], &modInfo, sizeof(modInfo))) {
+            LPVOID baseAddress = modInfo.lpBaseOfDll;
+            logInfoF("模块基址: 0x%p，大小: %d 字节", baseAddress, modInfo.SizeOfImage);
+            
+            // 读取8字节整数
+            long long value = 0;
+            SIZE_T bytesRead = 0;
+            
+            if (ReadProcessMemory(hProcess, baseAddress, &value, sizeof(value), &bytesRead)) {
+                logInfoF("成功读取8字节数据: 0x%llX (%lld)，读取字节数: %zu", value, value, bytesRead);
+            } else {
+                logInfoF("读取进程内存失败，错误代码: %d", GetLastError());
+            }
+            
+            // 读取4字节整数 (int)
+            int intValue = 0;
+            if (ReadProcessMemory(hProcess, baseAddress, &intValue, sizeof(intValue), &bytesRead)) {
+                logInfoF("成功读取4字节整数: 0x%X (%d)，读取字节数: %zu", intValue, intValue, bytesRead);
+            } else {
+                logInfoF("读取4字节整数失败，错误代码: %d", GetLastError());
+            }
+            
+            // 读取2字节短整数 (short)
+            short shortValue = 0;
+            if (ReadProcessMemory(hProcess, baseAddress, &shortValue, sizeof(shortValue), &bytesRead)) {
+                logInfoF("成功读取2字节短整数: 0x%X (%d)，读取字节数: %zu", shortValue, shortValue, bytesRead);
+            } else {
+                logInfoF("读取2字节短整数失败，错误代码: %d", GetLastError());
+            }
+            
+            // 读取1字节 (byte)
+            unsigned char byteValue = 0;
+            if (ReadProcessMemory(hProcess, baseAddress, &byteValue, sizeof(byteValue), &bytesRead)) {
+                logInfoF("成功读取1字节: 0x%02X (%d)，读取字节数: %zu", byteValue, byteValue, bytesRead);
+            } else {
+                logInfoF("读取1字节失败，错误代码: %d", GetLastError());
+            }
+            
+            // 读取4字节浮点数 (float)
+            float floatValue = 0.0f;
+            if (ReadProcessMemory(hProcess, baseAddress, &floatValue, sizeof(floatValue), &bytesRead)) {
+                logInfoF("成功读取4字节浮点数: %f，读取字节数: %zu", floatValue, bytesRead);
+            } else {
+                logInfoF("读取4字节浮点数失败，错误代码: %d", GetLastError());
+            }
+            
+            // 读取8字节双精度浮点数 (double)
+            double doubleValue = 0.0;
+            if (ReadProcessMemory(hProcess, baseAddress, &doubleValue, sizeof(doubleValue), &bytesRead)) {
+                logInfoF("成功读取8字节双精度浮点数: %lf，读取字节数: %zu", doubleValue, bytesRead);
+            } else {
+                logInfoF("读取8字节双精度浮点数失败，错误代码: %d", GetLastError());
+            }
+            
+            // 读取16字节数据块
+            unsigned char buffer[16] = {0};
+            if (ReadProcessMemory(hProcess, baseAddress, buffer, sizeof(buffer), &bytesRead)) {
+                logInfoF("成功读取16字节数据块，读取字节数: %zu", bytesRead);
+                // 以十六进制格式输出前8个字节
+                logInfoF("前8字节十六进制: %02X %02X %02X %02X %02X %02X %02X %02X", 
+                    buffer[0], buffer[1], buffer[2], buffer[3], 
+                    buffer[4], buffer[5], buffer[6], buffer[7]);
+            } else {
+                logInfoF("读取16字节数据块失败，错误代码: %d", GetLastError());
+            }
+            
+            // 读取指针值 (在64位系统上是8字节)
+            void* pointerValue = nullptr;
+            if (ReadProcessMemory(hProcess, baseAddress, &pointerValue, sizeof(pointerValue), &bytesRead)) {
+                logInfoF("成功读取指针值: 0x%p，读取字节数: %zu", pointerValue, bytesRead);
+            } else {
+                logInfoF("读取指针值失败，错误代码: %d", GetLastError());
+            }
+            
+            // 尝试读取不同偏移位置的数据
+            logInfoF("=== 尝试读取不同偏移位置的数据 ===");
+            for (int offset = 0; offset < 64; offset += 8) {
+                long long offsetValue = 0;
+                LPVOID offsetAddress = (LPVOID)((BYTE*)baseAddress + offset);
+                if (ReadProcessMemory(hProcess, offsetAddress, &offsetValue, sizeof(offsetValue), &bytesRead)) {
+                    logInfoF("偏移+%d: 0x%llX (%lld)", offset, offsetValue, offsetValue);
+                } else {
+                    logInfoF("偏移+%d: 读取失败，错误代码: %d", offset, GetLastError());
+                }
+            }
+        } else {
+            logInfoF("获取模块信息失败，错误代码: %d", GetLastError());
+        }
+    } else {
+        logInfoF("枚举进程模块失败，错误代码: %d", GetLastError());
+    }
+    
+    CloseHandle(hProcess);
+}
+
+// 自定义窗口过程函数，用于捕获滚轮消息
+LRESULT CALLBACK CustomWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    switch (uMsg) {
+        case WM_MOUSEWHEEL: {
+            if (g_mbView) {
+                // 获取鼠标位置
+                POINT pt;
+                pt.x = GET_X_LPARAM(lParam);
+                pt.y = GET_Y_LPARAM(lParam);
+                
+                // 转换为客户端坐标
+                ScreenToClient(hwnd, &pt);
+                
+                // 获取滚轮增量值
+                short delta = GET_WHEEL_DELTA_WPARAM(wParam);
+                
+                // 获取修饰键状态
+                DWORD flags = 0;
+                if (GET_KEYSTATE_WPARAM(wParam) & MK_LBUTTON) flags |= MB_LBUTTON;
+                if (GET_KEYSTATE_WPARAM(wParam) & MK_RBUTTON) flags |= MB_RBUTTON;
+                if (GET_KEYSTATE_WPARAM(wParam) & MK_MBUTTON) flags |= MB_MBUTTON;
+                if (GET_KEYSTATE_WPARAM(wParam) & MK_SHIFT) flags |= MB_SHIFT;
+                if (GET_KEYSTATE_WPARAM(wParam) & MK_CONTROL) flags |= MB_CONTROL;
+                
+                // 转发滚轮事件给miniblink
+                BOOL result = mbFireMouseWheelEvent(g_mbView, pt.x, pt.y, delta, flags);
+                
+                logInfoF("滚轮事件转发: x=%d, y=%d, delta=%d, flags=%d, 返回值=%d", pt.x, pt.y, delta, flags, result);
+                return 0; // 消息已处理
+            }
+            break;
+        }
+    }
+    
+    // 调用原始窗口过程处理其他消息
+    if (g_originalWndProc) {
+        return CallWindowProc(g_originalWndProc, hwnd, uMsg, wParam, lParam);
+    }
+    return DefWindowProc(hwnd, uMsg, wParam, lParam);
+}
 
 // libcurl写入回调函数
 static size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp) {
@@ -493,8 +682,16 @@ void onJsQuery(mbWebView webView, void* param,mbJsExecState es, int64_t queryId,
 
         // 返回给 JS
         mbResponseQuery(webView, queryId, customMsg, modifiedJsonData.c_str());
+    }if (strcmp((const char*)request, "xunhuan") == 0) {
+        logInfoF("循环过来了");
+        testProcessRead(); // 调用进程读取测试函数
+        std::string modifiedJsonData = "我知道了";
+        
+        mbResponseQuery(webView, queryId, customMsg, modifiedJsonData.c_str());
     }
 }
+
+
 
 int main()
 {
@@ -538,7 +735,23 @@ int main()
     int screenWidth = GetSystemMetrics(SM_CXSCREEN);
     int screenHeight = GetSystemMetrics(SM_CYSCREEN);
     mbWebView mbView = mbCreateWebWindow(MB_WINDOW_TYPE_TRANSPARENT, NULL, -2560, 0, screenWidth, screenHeight);
-
+    
+    // 保存WebView到全局变量
+    g_mbView = mbView;
+    
+    // 获取miniblink创建的窗口句柄
+    HWND mbHwnd = mbGetHostHWND(mbView);
+    if (mbHwnd) {
+        // 子类化窗口以捕获滚轮消息
+        g_originalWndProc = (WNDPROC)SetWindowLongPtr(mbHwnd, GWLP_WNDPROC, (LONG_PTR)CustomWndProc);
+        if (g_originalWndProc) {
+            logInfoF("成功子类化miniblink窗口，窗口句柄: 0x%p", mbHwnd);
+        } else {
+            logInfoF("子类化miniblink窗口失败，错误码: %d", GetLastError());
+        }
+    } else {
+        logInfoF("无法获取miniblink窗口句柄");
+    }
 
     mbOnJsQuery(mbView, onJsQuery,NULL);
 
@@ -547,10 +760,20 @@ int main()
     std::string vuePathUtf8(vuePath.begin(), vuePath.end());
     
     mbLoadURL(mbView, vuePathUtf8.c_str());
-
+   
     mbShowWindow(mbView, true);
 
     mbRunMessageLoop();
+    
+    // 恢复原始窗口过程
+    if (g_originalWndProc && g_mbView) {
+        HWND mbHwnd = mbGetHostHWND(g_mbView);
+        if (mbHwnd) {
+            SetWindowLongPtr(mbHwnd, GWLP_WNDPROC, (LONG_PTR)g_originalWndProc);
+            logInfoF("已恢复原始窗口过程");
+        }
+    }
+    
     ReleaseMutex(hMutex);
     CloseHandle(hMutex);
     

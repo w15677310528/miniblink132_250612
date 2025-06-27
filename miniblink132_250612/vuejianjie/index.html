@@ -34,7 +34,6 @@
   <!-- 其他内容不变 -->
 
   <script src="./js/v3.2.8/vue.global.prod.js" type="text/javascript" charset="utf-8"></script>
-  <script src="http://localhost:8899/cdp.js" crossorigin="anonymous"></script>
   <!-- 引入CSS文件 -->
   <link rel="stylesheet" href="./css/style.css" type="text/css" />
 </head>
@@ -85,7 +84,7 @@
       <!-- 站位图底图 -->
       <div class="lineup-location">
 
-        
+
         <!-- 英雄坐标点 -->
         <div v-for="hero in getCurrentBoardHeroList()" :key="'pos-' + hero.x + '-' + hero.y" class="location-champion"
           :class="'position' + hero.x + '-' + hero.y"
@@ -181,8 +180,7 @@
                 <div class="stage-hero-cell"
                   :class="{ 'selected': hero.chessData && isHeroSelected(hero.chessData.chessId) }"
                   @click="hero.chessData && selectHero(hero.chessData)">
-                  <img v-if="hero.chessData" class="stage-hero-avatar"
-                    :src="hero.chessData.name"
+                  <img v-if="hero.chessData" class="stage-hero-avatar" :src="hero.chessData.name"
                     :alt="hero.chessData.displayName" @mouseenter="showHeroTooltip(hero.chessData, $event)"
                     @mouseleave="hideHeroTooltip" />
                   <div v-else class="stage-hero-missing">已删除</div>
@@ -242,8 +240,7 @@
                 <div class="stage-hero-cell"
                   :class="{ 'selected': hero.chessData && isHeroSelected(hero.chessData.chessId) }"
                   @click="hero.chessData && selectHero(hero.chessData)">
-                  <img v-if="hero.chessData" class="stage-hero-avatar"
-                    :src="hero.chessData.name"
+                  <img v-if="hero.chessData" class="stage-hero-avatar" :src="hero.chessData.name"
                     :alt="hero.chessData.displayName" @mouseenter="showHeroTooltip(hero.chessData, $event)"
                     @mouseleave="hideHeroTooltip" />
                   <div v-else class="stage-hero-missing">已删除</div>
@@ -291,8 +288,7 @@
               <div class="stage-hero-cell"
                 :class="{ 'selected': hero.chessData && isHeroSelected(hero.chessData.chessId) }"
                 @click="hero.chessData && selectHero(hero.chessData)">
-                <img v-if="hero.chessData" class="stage-hero-avatar"
-                  :src="hero.chessData.name"
+                <img v-if="hero.chessData" class="stage-hero-avatar" :src="hero.chessData.name"
                   :alt="hero.chessData.displayName" @mouseenter="showHeroTooltip(hero.chessData, $event)"
                   @mouseleave="hideHeroTooltip" />
                 <div v-else class="stage-hero-missing">已删除</div>
@@ -468,9 +464,7 @@
                 <div v-for="hero in getChosenHeroData('early')" :key="'early-' + hero.id" class="chosen-hero-item"
                   @mouseenter="showHeroTooltip(getHeroById(hero.id), $event)" @mouseleave="hideHeroTooltip">
                   <div class="chosen-hero-avatar-container">
-                    <img class="chosen-hero-avatar"
-                      :src="hero.imagePath"
-                      :alt="hero.name" />
+                    <img class="chosen-hero-avatar" :src="hero.imagePath" :alt="hero.name" />
 
                   </div>
                   <div class="chosen-hero-info">
@@ -492,9 +486,7 @@
                 <div v-for="hero in getChosenHeroData('middle')" :key="'middle-' + hero.id" class="chosen-hero-item"
                   @mouseenter="showHeroTooltip(getHeroById(hero.id), $event)" @mouseleave="hideHeroTooltip">
                   <div class="chosen-hero-avatar-container">
-                    <img class="chosen-hero-avatar"
-                      :src=" hero.imagePath"
-                      :alt="hero.name" />
+                    <img class="chosen-hero-avatar" :src=" hero.imagePath" :alt="hero.name" />
 
                   </div>
                   <div class="chosen-hero-info">
@@ -516,9 +508,7 @@
                 <div v-for="hero in getChosenHeroData('late')" :key="'late-' + hero.id" class="chosen-hero-item"
                   @mouseenter="showHeroTooltip(getHeroById(hero.id), $event)" @mouseleave="hideHeroTooltip">
                   <div class="chosen-hero-avatar-container">
-                    <img class="chosen-hero-avatar"
-                      :src="hero.imagePath"
-                      :alt="hero.name" />
+                    <img class="chosen-hero-avatar" :src="hero.imagePath" :alt="hero.name" />
 
                   </div>
                   <div class="chosen-hero-info">
@@ -540,9 +530,7 @@
                 <div v-for="hero in getChosenHeroData('replace')" :key="'replace-' + hero.id" class="chosen-hero-item"
                   @mouseenter="showHeroTooltip(getHeroById(hero.id), $event)" @mouseleave="hideHeroTooltip">
                   <div class="chosen-hero-avatar-container">
-                    <img class="chosen-hero-avatar"
-                      :src="hero.imagePath"
-                      :alt="hero.name" />
+                    <img class="chosen-hero-avatar" :src="hero.imagePath" :alt="hero.name" />
 
                   </div>
                   <div class="chosen-hero-info">
@@ -586,8 +574,7 @@
                     <div v-for="heroId in group.original" :key="'original-' + heroId" class="replaceable-hero-item"
                       @mouseenter="showHeroTooltip(getHeroById(heroId), $event)" @mouseleave="hideHeroTooltip()">
                       <div class="replaceable-hero-cell">
-                        <img v-if="getHeroById(heroId)" class="replaceable-hero-avatar"
-                          :src="getHeroById(heroId).name"
+                        <img v-if="getHeroById(heroId)" class="replaceable-hero-avatar" :src="getHeroById(heroId).name"
                           :alt="getHeroById(heroId).name" />
                         <div v-else class="replaceable-hero-missing">未找到</div>
                       </div>
@@ -610,8 +597,7 @@
                       class="replaceable-hero-item" @mouseenter="showHeroTooltip(getHeroById(heroId), $event)"
                       @mouseleave="hideHeroTooltip()">
                       <div class="replaceable-hero-cell">
-                        <img v-if="getHeroById(heroId)" class="replaceable-hero-avatar"
-                          :src="getHeroById(heroId).name"
+                        <img v-if="getHeroById(heroId)" class="replaceable-hero-avatar" :src="getHeroById(heroId).name"
                           :alt="getHeroById(heroId).name" />
                         <div v-else class="replaceable-hero-missing">未找到</div>
                       </div>
@@ -1458,7 +1444,7 @@
           case 0x001:
 
             window.yuanchengdata = response;
-            
+
 
             break;
 
@@ -2555,7 +2541,7 @@
             this.loadingProgress = 0;
 
             try {
-              this.hero_avatar_xiao ="{{name}}";//删了出bug  就这样用着吧
+              this.hero_avatar_xiao = "{{name}}";//删了出bug  就这样用着吧
               // 直接读取本地 latestData.json 文件
 
               this.loadingMessage = "正在加载数据...";
@@ -2565,29 +2551,29 @@
 
                 // 等待数据加载，最多等待60秒
                 let retryCount = 0;
-                const maxRetries = 10*60; // 60秒，每100ms检查一次
+                const maxRetries = 10 * 60; // 60秒，每100ms检查一次
 
                 // 使用递归的方式替代while循环，确保UI能够更新
                 const checkData = async () => {
                   if (window.yuanchengdata) {
                     return true;
                   }
-                  
+
                   if (retryCount >= maxRetries) {
                     throw new Error("远程数据加载超时");
                   }
-                  
+
                   retryCount++;
                   // 更新加载进度显示
-                  this.loadingMessage = `等待远程数据... (${Math.floor(retryCount/10)}s)`;
-                  
+                  this.loadingMessage = `等待远程数据... (${Math.floor(retryCount / 10)}s)`;
+
                   // 使用Vue的nextTick确保UI更新
                   await this.$nextTick();
                   await new Promise(resolve => setTimeout(resolve, 100));
-                  
+
                   return await checkData();
                 };
-                
+
                 await checkData();
               }
               // 检查window.yuanchengdata的类型，如果已经是对象则直接使用，否则解析JSON
@@ -2599,7 +2585,7 @@
               console.log("远程数据成功加载...");
 
 
-              
+
 
               // 检查是否需要显示赛季选择器
               if (this.yuanchengdata.shifoulunhuan) {
@@ -2867,11 +2853,9 @@
               // 如果是avatar-mode-container中的头像，固定在右侧
               const avatarContainer = document.querySelector('.avatar-mode-container');
               if (avatarContainer) {
-                const rect = avatarContainer.getBoundingClientRect();
-                x = rect.right; // 容器右侧外10px
-                y = rect.top; // 与容器顶部对齐
-                x = event.clientX + 5;
-                y = event.clientY;
+                const targetRect = event.target.getBoundingClientRect();
+                x = targetRect.right; // 当前元素右侧外10px
+                y = targetRect.bottom; // 当前元素底部外5px
               } else {
                 // 降级处理：如果找不到容器，使用默认行为
                 x = event.clientX + 20;
@@ -2885,9 +2869,10 @@
                 const fontSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
                 //字体乘2.6
 
-                x = event.clientX - fontSize * 3;
-                y = event.clientY;
 
+                const targetRect = event.target.getBoundingClientRect();
+                x = targetRect.right - fontSize * 3.3; // 当前元素右侧外10px
+                y = targetRect.bottom; // 当前元素底部外5px
               } else {
                 // 降级处理
                 x = event.clientX + 20;
@@ -2966,7 +2951,7 @@
               clearTimeout(this.tooltipDebounceTimer);
               this.tooltipDebounceTimer = null;
             }
-            
+
             this.tooltipVisible = false;
             this.tooltipHero = null;
             this.isPositionPanelTooltip = false; // 重置position-panel标识
@@ -3055,9 +3040,7 @@
             }
 
             // 如果是同一个装备，直接返回
-            if (this.currentEquip && this.currentEquip.name === (equip.name || equip.displayName)) {
-              return;
-            }
+
 
             this.equipTooltipDebounceTimer = setTimeout(() => {
               this.showEquipTooltipInternal(equip, event);
@@ -3087,7 +3070,9 @@
             // 始终优先显示在鼠标左侧，避免右侧溢出
             let x = event.clientX - tooltipWidth - 20; // 默认左侧偏移更多
             let y = event.clientY - 50;
-
+            const targetRect = event.target.getBoundingClientRect();
+            x = targetRect.right - fontSize * 3.45; // 当前元素右侧外10px
+            y = targetRect.bottom; // 当前元素底部外5px
             // 如果左侧空间不足，则尝试放在右侧
             if (x < 10) {
               x = event.clientX + 20;
@@ -3126,7 +3111,7 @@
               clearTimeout(this.equipTooltipDebounceTimer);
               this.equipTooltipDebounceTimer = null;
             }
-            
+
             this.equipTooltipVisible = false;
           },
           // 海克斯悬浮提示框方法
@@ -3170,7 +3155,9 @@
 
             let x = event.clientX - tooltipWidth - 20;
             let y = event.clientY - 50;
-
+            const targetRect = event.target.getBoundingClientRect();
+            x = targetRect.right - fontSize * 3.6; // 当前元素右侧外10px
+            y = targetRect.bottom; // 当前元素底部外5px
             if (x < 10) {
               x = event.clientX + 20;
               if (x + tooltipWidth > window.innerWidth - 10) {
@@ -4333,15 +4320,15 @@
         // 挂载时自动调用 fetchDatachushi 方法
         mounted() {
           console.log("调用成功");
-          
+
           // 获取浏览器内核版本
           const userAgent = navigator.userAgent;
           const chromeMatch = userAgent.match(/Chrome\/(\d+)/);
-          
+
           if (chromeMatch) {
             const chromeVersion = parseInt(chromeMatch[1]);
             console.log(`检测到Chrome版本: ${chromeVersion}`);
-            
+
             if (chromeVersion === 137) {
               console.log("检测到Chrome 137版本，执行特定逻辑");
               // 读取本地debug_original_json.txt文件
@@ -4349,7 +4336,7 @@
                 const xhr = new XMLHttpRequest();
                 xhr.open('GET', './debug_original_json.txt', false); // 同步请求
                 xhr.send();
-                
+
                 if (xhr.status === 200) {
                   window.yuanchengdata = JSON.parse(xhr.responseText);
                   console.log("成功读取debug_original_json.txt文件");
@@ -4361,81 +4348,36 @@
                 console.error("读取debug_original_json.txt文件失败:", error);
                 window.yuanchengdata = null;
               }
-            }else{
+            } else {
 
               window.mbQuery(0x001, "getdata", onNative);
             }
           }
-          
-          
-         
+
+
+
           console.log("调用成功");
           this.fetchDatachushi();
           this.loadFavoritesFromFile(); // 加载收藏数据
           this.loadSettings(); // 加载用户设置
+          //添加一个循环  每100毫秒调用一次
 
-          // 添加全局鼠标移动监听，确保可以捕获事件
-          document.addEventListener('mousemove', (e) => {
-            // 在控制台显示鼠标位置，验证事件系统工作正常
-            // //console.log('鼠标位置:', e.clientX, e.clientY);
-          });
-
-          // 添加到mounted方法中
-          document.addEventListener('click', (e) => {
-
-          });
-
-          // 添加键盘快捷键支持
-          document.addEventListener('keydown', (e) => {
-            // Esc键关闭当前面板
-            if (e.key === 'Escape') {
-              if (this.showFilterPanel) {
-                this.showFilterPanel = false;
-              } else if (this.showLineupDetail) {
-                this.closeLineupDetail();
-              } else if (this.topMenu) {
-                this.topMenu = '';
-              }
+          let isProcessing = false;
+          setInterval(() => {
+            if (!isProcessing) {
+              isProcessing = true;
+              window.mbQuery(0x002, "xunhuan", (response) => {
+                onNative(response);
+                isProcessing = false; // 处理完成后重置标志
+              });
             }
+          }, 500);
 
-            // Ctrl+快捷键
-            if (e.ctrlKey) {
-              switch (e.key) {
-                case 'f':
-                case 'F':
-                  e.preventDefault();
-                  // 聚焦搜索框
-                  const searchInput = document.querySelector('.search-input');
-                  if (searchInput) {
-                    searchInput.focus();
-                  }
-                  break;
-                case 'r':
-                case 'R':
-                  e.preventDefault();
-                  this.reloadData();
-                  break;
-                case 'e':
-                case 'E':
-                  e.preventDefault();
-                  this.exportFavorites();
-                  break;
-                case 'i':
-                case 'I':
-                  e.preventDefault();
-                  this.importFavorites();
-                  break;
-              }
-            }
-          });
 
-          // 为stage-hero-cell添加特定调试
-          const cells = document.querySelectorAll('.stage-hero-cell');
-          cells.forEach(cell => {
-            cell.addEventListener('click', (e) => {
-              //console.log('Direct cell click:', e.target);
-            });
-          });
+
+
+
+
         }
       };
       Vue.createApp(App).mount("#app");
