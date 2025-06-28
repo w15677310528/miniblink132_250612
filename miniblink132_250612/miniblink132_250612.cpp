@@ -940,7 +940,7 @@ int main()
     mbLoadURL(mbView, vuePathUtf8.c_str());
    
     mbShowWindow(mbView, true);
-
+    mbRunJs();
     mbRunMessageLoop();
     
     // 方案1：无需停止后台线程
