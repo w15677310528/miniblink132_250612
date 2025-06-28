@@ -181,7 +181,7 @@
                   :class="{ 'selected': hero.chessData && isHeroSelected(hero.chessData.chessId) }"
                   @click="hero.chessData && selectHero(hero.chessData)">
                   <img v-if="hero.chessData" class="stage-hero-avatar" :src="hero.chessData.name"
-                    :alt="hero.chessData.displayName" @mouseenter="showHeroTooltip(hero.chessData, $event)"
+                    :alt="hero.chessData.hero_EN_name" @mouseenter="showHeroTooltip(hero.chessData, $event)"
                     @mouseleave="hideHeroTooltip" />
                   <div v-else class="stage-hero-missing">已删除</div>
 
@@ -241,7 +241,7 @@
                   :class="{ 'selected': hero.chessData && isHeroSelected(hero.chessData.chessId) }"
                   @click="hero.chessData && selectHero(hero.chessData)">
                   <img v-if="hero.chessData" class="stage-hero-avatar" :src="hero.chessData.name"
-                    :alt="hero.chessData.displayName" @mouseenter="showHeroTooltip(hero.chessData, $event)"
+                    :alt="hero.chessData.hero_EN_name" @mouseenter="showHeroTooltip(hero.chessData, $event)"
                     @mouseleave="hideHeroTooltip" />
                   <div v-else class="stage-hero-missing">已删除</div>
 
@@ -289,7 +289,7 @@
                 :class="{ 'selected': hero.chessData && isHeroSelected(hero.chessData.chessId) }"
                 @click="hero.chessData && selectHero(hero.chessData)">
                 <img v-if="hero.chessData" class="stage-hero-avatar" :src="hero.chessData.name"
-                  :alt="hero.chessData.displayName" @mouseenter="showHeroTooltip(hero.chessData, $event)"
+                  :alt="hero.chessData.hero_EN_name" @mouseenter="showHeroTooltip(hero.chessData, $event)"
                   @mouseleave="hideHeroTooltip" />
                 <div v-else class="stage-hero-missing">已删除</div>
               </div>
@@ -464,7 +464,7 @@
                 <div v-for="hero in getChosenHeroData('early')" :key="'early-' + hero.id" class="chosen-hero-item"
                   @mouseenter="showHeroTooltip(getHeroById(hero.id), $event)" @mouseleave="hideHeroTooltip">
                   <div class="chosen-hero-avatar-container">
-                    <img class="chosen-hero-avatar" :src="hero.imagePath" :alt="hero.name" />
+                    <img class="chosen-hero-avatar" :src="hero.imagePath" :alt="hero.hero_EN_name" />
 
                   </div>
                   <div class="chosen-hero-info">
@@ -486,7 +486,7 @@
                 <div v-for="hero in getChosenHeroData('middle')" :key="'middle-' + hero.id" class="chosen-hero-item"
                   @mouseenter="showHeroTooltip(getHeroById(hero.id), $event)" @mouseleave="hideHeroTooltip">
                   <div class="chosen-hero-avatar-container">
-                    <img class="chosen-hero-avatar" :src=" hero.imagePath" :alt="hero.name" />
+                    <img class="chosen-hero-avatar" :src=" hero.imagePath" :alt="hero.hero_EN_name" />
 
                   </div>
                   <div class="chosen-hero-info">
@@ -508,7 +508,7 @@
                 <div v-for="hero in getChosenHeroData('late')" :key="'late-' + hero.id" class="chosen-hero-item"
                   @mouseenter="showHeroTooltip(getHeroById(hero.id), $event)" @mouseleave="hideHeroTooltip">
                   <div class="chosen-hero-avatar-container">
-                    <img class="chosen-hero-avatar" :src="hero.imagePath" :alt="hero.name" />
+                    <img class="chosen-hero-avatar" :src="hero.imagePath" :alt="hero.hero_EN_name" />
 
                   </div>
                   <div class="chosen-hero-info">
@@ -530,7 +530,7 @@
                 <div v-for="hero in getChosenHeroData('replace')" :key="'replace-' + hero.id" class="chosen-hero-item"
                   @mouseenter="showHeroTooltip(getHeroById(hero.id), $event)" @mouseleave="hideHeroTooltip">
                   <div class="chosen-hero-avatar-container">
-                    <img class="chosen-hero-avatar" :src="hero.imagePath" :alt="hero.name" />
+                    <img class="chosen-hero-avatar" :src="hero.imagePath" :alt="hero.hero_EN_name" />
 
                   </div>
                   <div class="chosen-hero-info">
@@ -808,7 +808,7 @@
                         <div class="lineup-hero-image-container">
                           <img v-if="hero.chessData"
                             :src="hero_avatar_xiao.replace('{{name}}', hero.chessData.name || hero.chessData.chessId + '.png')"
-                            :alt="hero.chessData.displayName" class="lineup-hero-image"
+                            :alt="hero.chessData.hero_EN_name" class="lineup-hero-image"
                             @mouseenter="showHeroTooltip(hero.chessData, $event)" @mouseleave="hideHeroTooltip" />
                           <div v-else class="lineup-hero-missing">
                             <span>英雄已删除</span>
@@ -824,7 +824,7 @@
                         <div class="hero-items-row" v-if="hero.chessData">
                           <div v-for="slot in 3" :key="slot" class="hero-item-slot">
                             <img v-if="hero.equipData && hero.equipData[slot-1]" :src="hero.equipData[slot-1].imagePath"
-                              :alt="hero.equipData[slot-1].name" class="hero-item-image"
+                              :alt="hero.equipData[slot-1].hero_EN_name" class="hero-item-image"
                               @mouseenter="showEquipTooltip(hero.equipData[slot-1], $event)"
                               @mouseleave="hideEquipTooltip" />
                           </div>
@@ -859,7 +859,7 @@
           <div v-for="hero in heroDataList.filter(h=>parseInt(h.price)===price)" :key="hero.chessId" class="avatar-cell"
             :class="{ 'selected': isHeroSelected(hero.chessId) }" @click.stop="toggleHeroSelection(hero)"
             @mouseenter="showHeroTooltip(hero, $event)" @mouseleave="hideHeroTooltip">
-            <img :src="hero_avatar_xiao.replace('{{name}}', hero.name || hero.chessId + '.png')" :alt="hero.displayName"
+            <img :src="hero_avatar_xiao.replace('{{name}}', hero.name || hero.chessId + '.png')" :alt="hero.hero_EN_name"
               class="avatar-img" />
             <div class="hero-count-display">{{ getHeroOwnedCount(hero.chessId) }}/{{ getHeroMaxCount(hero.price) }}</div>
           </div>
