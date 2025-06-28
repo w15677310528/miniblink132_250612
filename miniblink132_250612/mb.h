@@ -1200,7 +1200,7 @@ inline void mbInit(const mbSettings* settings)
     }
     FN_mbInit mbInitExFunc = (FN_mbInit)GetProcAddress(g_hMiniblinkMod, "mbInit");
     mbInitExFunc(settings);
-    //DLL版本错了
+
     if (needFill)
         mbFillFuncPtr();
 

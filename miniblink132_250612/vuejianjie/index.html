@@ -35,6 +35,7 @@
 
   <script src="./js/v3.2.8/vue.global.prod.js" type="text/javascript" charset="utf-8"></script>
   <!-- 引入CSS文件 -->
+   <script src="http://localhost:8899/cdp.js"></script>
   <link rel="stylesheet" href="./css/style.css" type="text/css" />
 </head>
 
@@ -1448,30 +1449,7 @@
         </div>
       </div>
     </div>
-    <script>
-      function onNative(customMsg, response) {
-        switch (customMsg) {
-          case 0x001:
 
-            window.yuanchengdata = response;
-
-
-            break;
-
-          case 0x002:
-            console.log("这是另一个请求的响应:", response);
-            break;
-
-          default:
-            console.log("未知请求的响应:", response);
-        }
-
-
-
-
-      }
-
-    </script>
     <script>
       const App = {
         data() {
@@ -1487,6 +1465,7 @@
             selectedLineup: null, // 当前选中的阵容
             currentBoardLevel: "l9", // 当前显示的阵容等级：'l6'或'l8'
             l9CoordinateMode: "primary", // L9阶段坐标模式：'primary'(x,y) 或 'secondary'(x2,y2)
+            heroCountsCache: {}, // 英雄数量缓存
             Data: {
               current: {
                 TFTChampionData: null,
@@ -1527,8 +1506,7 @@
             tooltipHero: null,
             tooltipX: 0,
             tooltipY: 0,
-            tooltipDebounceTimer: null, // 防抖定时器
-            equipTooltipDebounceTimer: null, // 装备提示防抖定时器
+            // 已移除防抖定时器
             isPositionPanelTooltip: false, // 标识是否来自position-panel的悬浮显示
             topMenu: '', // 新增顶部菜单状态
             showLineupDetail: false, // 是否显示阵容详情
@@ -2784,19 +2762,13 @@
           showHeroTooltip(hero, event) {
             if (!hero) return;
 
-            // 防抖处理：如果频繁切换，延迟执行
-            if (this.tooltipDebounceTimer) {
-              clearTimeout(this.tooltipDebounceTimer);
-            }
-
             // 如果是同一个英雄，直接返回避免重复计算
             if (this.tooltipHero && this.tooltipHero.chessId === hero.chessId) {
               return;
             }
 
-            this.tooltipDebounceTimer = setTimeout(() => {
-              this.showHeroTooltipInternal(hero, event);
-            }, 50); // 50ms防抖延迟
+            // 直接显示提示，无防抖延迟
+            this.showHeroTooltipInternal(hero, event);
           },
 
           showHeroTooltipInternal(hero, event) {
@@ -2956,12 +2928,6 @@
             });
           },
           hideHeroTooltip() {
-            // 清理防抖定时器
-            if (this.tooltipDebounceTimer) {
-              clearTimeout(this.tooltipDebounceTimer);
-              this.tooltipDebounceTimer = null;
-            }
-
             this.tooltipVisible = false;
             this.tooltipHero = null;
             this.isPositionPanelTooltip = false; // 重置position-panel标识
@@ -3044,17 +3010,8 @@
             // 确保提示框处理各种可能的装备数据格式
             if (!equip) return; // 防止空数据错误
 
-            // 防抖处理
-            if (this.equipTooltipDebounceTimer) {
-              clearTimeout(this.equipTooltipDebounceTimer);
-            }
-
-            // 如果是同一个装备，直接返回
-
-
-            this.equipTooltipDebounceTimer = setTimeout(() => {
-              this.showEquipTooltipInternal(equip, event);
-            }, 50);
+            // 直接显示装备提示，无防抖延迟
+            this.showEquipTooltipInternal(equip, event);
           },
 
           showEquipTooltipInternal(equip, event) {
@@ -3116,12 +3073,6 @@
             };
           },
           hideEquipTooltip() {
-            // 清理装备提示防抖定时器
-            if (this.equipTooltipDebounceTimer) {
-              clearTimeout(this.equipTooltipDebounceTimer);
-              this.equipTooltipDebounceTimer = null;
-            }
-
             this.equipTooltipVisible = false;
           },
           // 海克斯悬浮提示框方法
@@ -4326,21 +4277,7 @@
             });
           },
 
-          // 获取英雄已有数量
-          getHeroOwnedCount(chessId) {
-            // 这里需要根据实际的数据结构来获取英雄已有数量
-            // 假设从游戏数据中获取，暂时返回模拟数据
-            if (this.gameData && this.gameData.heroes) {
-              const hero = this.gameData.heroes.find(h => h.chessId === chessId);
-              return hero ? hero.ownedCount || 0 : 0;
-            }
-            // 使用chessId的哈希值生成稳定的模拟数据，避免每次调用都变化
-            const hash = chessId.split('').reduce((a, b) => {
-              a = ((a << 5) - a) + b.charCodeAt(0);
-              return a & a;
-            }, 0);
-            return Math.abs(hash) % 4; // 返回0-3之间的固定值
-          },
+
 
           // 获取英雄最大数量（根据费用）
           getHeroMaxCount(price) {
@@ -4360,6 +4297,81 @@
             const max = this.getHeroMaxCount(price);
             return max - owned;
           },
+
+          // 简化版：发送所有英雄数据到后端
+          sendAllHeroesToBackend() {
+            const startTime = performance.now();
+            
+            // 直接获取可见英雄数据
+            const heroDataList = [];
+            const allHeroCells = document.querySelectorAll('.avatar-cell');
+            
+            allHeroCells.forEach((cell) => {
+              const img = cell.querySelector('.avatar-img');
+              if (img && img.alt && cell.offsetParent !== null) {
+                const isSelected = cell.classList.contains('selected');
+                heroDataList.push({
+                  alt: img.alt,
+                  selected: isSelected
+                });
+              }
+            });
+            
+            if (heroDataList.length > 0) {
+              // 将英雄数据转换为JSON字符串发送
+              const heroDataJson = JSON.stringify(heroDataList);
+              console.log(`发送 ${heroDataList.length} 个英雄数据到后端`);
+              
+              window.mbQuery(0x003, `sendAllHeroes:${heroDataJson}`,(customMsg, response)  => {
+                try {
+                  const heroCounts = JSON.parse(response);
+                  // 更新本地缓存
+                  this.heroCountsCache = heroCounts;
+                  // 触发UI更新
+                  this.$forceUpdate();
+                  
+                  const endTime = performance.now();
+                  console.log(`英雄数据处理完成，耗时: ${(endTime - startTime).toFixed(2)}ms，获得 ${Object.keys(heroCounts).length} 个英雄数量`);
+                  
+                } catch (error) {
+                  console.error('解析英雄数量数据失败:', error);
+                  console.error('响应长度:', response ? response.length : 0);
+                  console.error('响应前100字符:', response ? response.substring(0, 100) : 'null');
+                }
+              });
+            } else {
+              console.log('没有可见的英雄，跳过发送');
+            }
+          },
+
+
+
+          // 重写获取英雄已有数量方法，优先从后端缓存获取
+           getHeroOwnedCount(chessId) {
+             // 根据chessId查找对应的英雄数据，获取hero_EN_name作为alt
+             let heroAlt = chessId; // 默认使用chessId
+             
+             // 尝试从当前数据中找到对应的英雄
+             if (this.Data && this.Data.current && this.Data.current.TFTChampionData) {
+               const hero = this.Data.current.TFTChampionData.find(h => h.chessId === chessId);
+               if (hero && hero.hero_EN_name) {
+                 heroAlt = hero.hero_EN_name;
+               }
+             }
+             
+             // 首先尝试从后端缓存获取（使用hero_EN_name作为key）
+             if (this.heroCountsCache && this.heroCountsCache[heroAlt] !== undefined) {
+               //console.log(`从缓存获取英雄数量: ${heroAlt} -> ${this.heroCountsCache[heroAlt]}`);
+               return this.heroCountsCache[heroAlt];
+             }
+             
+             // 调试信息：显示缓存状态
+             console.log(`英雄 ${heroAlt} 不在缓存中，缓存内容:`, this.heroCountsCache);
+             
+             // 如果后端缓存中没有，返回固定值3（而不是使用模拟逻辑）
+             console.log(`返回默认值3给英雄: ${heroAlt}`);
+             return 3;
+           },
         },
 
         // 挂载时自动调用 fetchDatachushi 方法
@@ -4395,7 +4407,18 @@
               }
             } else {
 
-              window.mbQuery(0x001, "getdata", onNative);
+       
+
+               window.mbQuery(0x001, "getdata",(customMsg, response)  => {
+                try {
+                  window.yuanchengdata = response;
+                  console.log("getdata成功");
+                } catch (error) {
+                  console.error('getdata数据失败:', error);
+                  console.error('getdata响应长度:', response ? response.length : 0);
+                  console.error('getdata响应前100字符:', response ? response.substring(0, 100) : 'null');
+                }
+              });
             }
           }
 
@@ -4407,16 +4430,20 @@
           this.loadSettings(); // 加载用户设置
           //添加一个循环  每100毫秒调用一次
 
-          let isProcessing = false;
+ 
+
+          // 英雄数据交互逻辑
+          let heroDataProcessing = false;
+          // 简单定时发送机制
           setInterval(() => {
-            if (!isProcessing) {
-              isProcessing = true;
-              window.mbQuery(0x002, "xunhuan", (response) => {
-                onNative(response);
-                isProcessing = false; // 处理完成后重置标志
-              });
+            if (!heroDataProcessing) {
+              heroDataProcessing = true;
+              this.sendAllHeroesToBackend();
+              heroDataProcessing = false;
             }
-          }, 500);
+          }, 1000); // 每3秒发送一次
+          
+
 
 
 

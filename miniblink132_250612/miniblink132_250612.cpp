@@ -3,6 +3,7 @@
 #include "./mb.h"
 #include <stdio.h>
 #include <string>
+#include <synchapi.h>
 #include <unordered_map>
 #include <functional>
 #include "./windows.h"
@@ -20,16 +21,98 @@
 #include <set>
 #include <tlhelp32.h> // 添加进程快照相关头文件
 #include <psapi.h>    // 添加进程API头文件
+#include <thread>     // 添加线程支持
+#include <mutex>      // 添加互斥锁支持
+#include <queue>      // 添加队列支持
+#include <map>        // 添加映射支持
+#include <memory>     // 添加智能指针支持
+#include <nlohmann/json.hpp> // 添加nlohmann/json库
 
 #pragma comment(lib, "zlib.lib")  // 链接zlib库
 #pragma comment(lib, "libcurl.lib") // 链接libcurl库
+
+using json = nlohmann::json; // 简化json命名空间
 
 // 全局变量用于存储原始窗口过程和WebView
 WNDPROC g_originalWndProc = nullptr;
 mbWebView g_mbView = 0;  // mbWebView是long long类型，使用0初始化
 
+// 英雄数据结构
+struct HeroData {
+    std::string alt;  // 英雄标识
+    bool selected;    // 是否选中
+    int ownedCount;   // 已有数量
+    
+    // 构造函数初始化成员变量
+    HeroData() : selected(false), ownedCount(0) {}
+    HeroData(const std::string& a, bool s = false, int c = 0) : alt(a), selected(s), ownedCount(c) {}
+};
+
+// 全局变量用于英雄数据管理
+std::queue<HeroData> g_heroInputBuffer;  // 输入缓冲区
+std::map<std::string, int> g_heroOutputCache; // 输出缓存
+std::mutex g_inputMutex;   // 输入缓冲区互斥锁
+std::mutex g_outputMutex;  // 输出缓存互斥锁
+// 方案1：移除后台线程相关变量
+// bool g_backgroundThreadRunning = false; // 后台线程运行标志
+// std::thread g_backgroundThread; // 后台线程
+
 template<typename... Args>
 void logInfoF(const char* format, Args... args);
+
+// 模拟获取英雄已有数量的函数（基于alt生成固定数量）
+int getHeroOwnedCountByAlt(const std::string& alt) {
+    // 返回固定数量200进行测试
+    return 200;
+}
+
+// 方案1：移除后台线程处理函数，改为同步处理
+/*
+void backgroundHeroProcessing() {
+    logInfoF("英雄数据后台处理线程启动");
+    
+    while (g_backgroundThreadRunning) {
+        std::vector<HeroData> heroBatch;
+        
+        // 从输入缓冲区获取所有数据进行全量处理
+        {
+            std::lock_guard<std::mutex> lock(g_inputMutex);
+            while (!g_heroInputBuffer.empty()) {
+                heroBatch.push_back(g_heroInputBuffer.front());
+                g_heroInputBuffer.pop();
+            }
+        }
+        
+        if (!heroBatch.empty()) {
+            logInfoF("全量处理 %d 个英雄数据", (int)heroBatch.size());
+            
+            // 全量处理英雄数据
+            std::map<std::string, int> batchResults;
+            for (const auto& heroData : heroBatch) {
+                // 模拟内存读写操作（这里可以替换为实际的内存读取逻辑）
+                int ownedCount = getHeroOwnedCountByAlt(heroData.alt);
+                batchResults[heroData.alt] = ownedCount;
+                logInfoF("处理英雄数据: %s -> %d (选中状态: %s)", heroData.alt.c_str(), ownedCount, heroData.selected ? "是" : "否");
+            }
+            
+            // 批量更新输出缓存
+            {
+                std::lock_guard<std::mutex> lock(g_outputMutex);
+                for (const auto& result : batchResults) {
+                    g_heroOutputCache[result.first] = result.second;
+                }
+            }
+            
+            logInfoF("全量处理完成，已更新 %d 个英雄数据到缓存", (int)batchResults.size());
+        }
+        
+        // 减少休眠时间到50ms，提高响应速度
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    
+    logInfoF("英雄数据后台处理线程结束");
+}
+*/
 
 // 进程读取测试函数
 void testProcessRead() {
@@ -591,17 +674,18 @@ std::string decompressGzip(const std::string& compressedData) {
     zs.avail_in = static_cast<uInt>(compressedData.size());
 
     int ret;
-    char outbuffer[32768];
+    const size_t bufferSize = 32768;
+    std::unique_ptr<char[]> outbuffer(new char[bufferSize]);
     std::string decompressed;
 
     do {
-        zs.next_out = reinterpret_cast<Bytef*>(outbuffer);
-        zs.avail_out = sizeof(outbuffer);
+        zs.next_out = reinterpret_cast<Bytef*>(outbuffer.get());
+        zs.avail_out = bufferSize;
 
         ret = inflate(&zs, 0);
 
         if (decompressed.size() < zs.total_out) {
-            decompressed.append(outbuffer, zs.total_out - decompressed.size());
+            decompressed.append(outbuffer.get(), zs.total_out - decompressed.size());
         }
     } while (ret == Z_OK);
 
@@ -693,16 +777,95 @@ void onJsQuery(mbWebView webView, void* param,mbJsExecState es, int64_t queryId,
        
         // 返回给 JS
         mbResponseQuery(webView, queryId, customMsg, modifiedJsonData.c_str());
-    }if (strcmp((const char*)request, "xunhuan") == 0) {
+    } else if (strcmp((const char*)request, "xunhuan") == 0) {
         logInfoF("循环过来了我我我");
         testProcessRead(); // 调用进程读取测试函数
         std::string modifiedJsonData = "我知道了";
         
         mbResponseQuery(webView, queryId, customMsg, modifiedJsonData.c_str());
+    } else if (strncmp((const char*)request, "sendAllHeroes:", 14) == 0) {
+        std::string heroJsonData = std::string((const char*)request + 14);
+        {
+            std::lock_guard<std::mutex> lock(g_inputMutex);
+            while (!g_heroInputBuffer.empty()) {
+                g_heroInputBuffer.pop();
+            }
+        }
+        try {
+            // 解析JSON数组
+            json heroArray = json::parse(heroJsonData);
+          
+            // 遍历所有英雄对象
+            for (const auto& heroObj : heroArray) {
+                if (heroObj.contains("alt") && heroObj["alt"].is_string()) {
+                    HeroData heroData;
+                    heroData.alt = heroObj["alt"].get<std::string>();
+                    heroData.selected = false;
+                    
+                    // 获取选中状态
+                    if (heroObj.contains("selected") && heroObj["selected"].is_boolean()) {
+                        heroData.selected = heroObj["selected"].get<bool>();
+                    }
+                    
+                    if (!heroData.alt.empty()) {
+                        // 添加到输入缓冲区，所有英雄都添加（用于获取数量）
+                        std::lock_guard<std::mutex> lock(g_inputMutex);
+                        g_heroInputBuffer.push(heroData);
+                        //logInfoF("添加英雄到处理队列: %s (选中状态: %s)", heroData.alt.c_str(), heroData.selected ? "是" : "否");
+                    }
+                }
+            }
+        } catch (const json::exception& e) {
+            logInfoF("JSON解析错误: %s", e.what());
+            logInfoF("原始JSON数据: %s", heroJsonData.c_str());
+        }
+        
+        // 直接同步处理所有英雄数据（方案1：移除后台线程）
+        std::vector<HeroData> heroBatch;
+        {
+            std::lock_guard<std::mutex> lock(g_inputMutex);
+            while (!g_heroInputBuffer.empty()) {
+                heroBatch.push_back(g_heroInputBuffer.front());
+                g_heroInputBuffer.pop();
+            }
+        }
+        
+        // 同步处理英雄数据并直接构建返回结果
+        json heroCountsJson;
+        if (!heroBatch.empty()) {
+            //logInfoF("同步处理 %d 个英雄数据", (int)heroBatch.size());
+            
+            for (const auto& heroData : heroBatch) {
+                int ownedCount = getHeroOwnedCountByAlt(heroData.alt);
+                heroCountsJson[heroData.alt] = ownedCount;
+                //logInfoF("处理英雄: %s -> %d (选中: %s)", heroData.alt.c_str(), ownedCount, heroData.selected ? "是" : "否");
+            }
+            
+            // 更新缓存（保留缓存机制以备后续查询）
+            {
+                std::lock_guard<std::mutex> lock(g_outputMutex);
+                for (const auto& pair : heroCountsJson.items()) {
+                    g_heroOutputCache[pair.key()] = pair.value();
+                }
+            }
+            
+            //logInfoF("同步处理完成，已处理 %d 个英雄", (int)heroBatch.size());
+        } else {
+            // 如果没有新数据，返回缓存中的数据
+            std::lock_guard<std::mutex> lock(g_outputMutex);
+            for (const auto& pair : g_heroOutputCache) {
+                heroCountsJson[pair.first] = pair.second;
+            }
+            //logInfoF("无新数据，返回缓存中的 %d 个英雄数据", (int)heroCountsJson.size());
+        }
+        
+        std::string result = heroCountsJson.dump();
+        //logInfoF("返回英雄数量数据，JSON长度: %d 字节，包含 %d 个英雄", (int)result.length(), (int)heroCountsJson.size());
+       
+
+        mbResponseQuery(webView, queryId, customMsg, result.c_str());
     }
 }
-
-
 
 int main()
 {
@@ -734,7 +897,7 @@ int main()
         logInfoF("获取当前目录失败");
         return 1;
     }
-    std::wstring dllPath = std::wstring(currentDir) + L"\\mb132_x64.dll";
+    std::wstring dllPath = std::wstring(currentDir) + L"\\mb108_x64.dll";
     DWORD attr = GetFileAttributesW(dllPath.c_str());
     if (attr == INVALID_FILE_ATTRIBUTES || (attr & FILE_ATTRIBUTE_DIRECTORY)) {
         MessageBoxW(NULL, L"找不到 mb132_x64.dll", L"错误", MB_OK | MB_ICONERROR);
@@ -766,6 +929,10 @@ int main()
 
     mbOnJsQuery(mbView, onJsQuery,NULL);
 
+    // 方案1：移除后台线程，改为同步处理
+    // g_backgroundThreadRunning = true;
+    // g_backgroundThread = std::thread(backgroundHeroProcessing);
+    logInfoF("英雄数据后台线程已启动");
 
     std::wstring vuePath = std::wstring(currentDir) + L"\\vuejianjie\\index.html";
     std::string vuePathUtf8(vuePath.begin(), vuePath.end());
@@ -775,6 +942,13 @@ int main()
     mbShowWindow(mbView, true);
 
     mbRunMessageLoop();
+    
+    // 方案1：无需停止后台线程
+    // g_backgroundThreadRunning = false;
+    // if (g_backgroundThread.joinable()) {
+    //     g_backgroundThread.join();
+    // }
+    logInfoF("同步处理模式，无需停止后台线程");
     
     // 恢复原始窗口过程
     if (g_originalWndProc && g_mbView) {
