@@ -1650,6 +1650,33 @@ img {
   color: gold; /* 使价格文字更醒目 */
 }
 
+.hero-tooltip-count {
+  font-size: 0.14rem;
+  color: #ffffff;
+  margin-top: 0.05rem;
+  padding: 0.02rem 0.05rem;
+  border-radius: 0.03rem;
+}
+
+.hero-count-display {
+  position: absolute;
+  bottom: 0.02rem;
+  right: 0.02rem;
+  color: #ffffff;
+  font-size: 0.12rem;
+  padding: 0.01rem 0.03rem;
+  border-radius: 0.02rem;
+  font-weight: bold;
+  min-width: 0.3rem;
+  text-align: center;
+  z-index: 10;
+    text-shadow: 
+  1px 1px 0 #000, 
+  -1px 1px 0 #000, 
+  1px -1px 0 #000, 
+  -1px -1px 0 #000; /* 使用多个 text-shadow 模拟清晰描边 */
+}
+
 /* 可能需要调整标题和名称的样*/
 .hero-tooltip-title, .hero-tooltip-name {
   margin: 0.02rem 0;
@@ -2924,6 +2951,7 @@ img {
   gap: 0; /* 移除子元素间距 */
 }
 .avatar-cell {
+  position: relative; /* 添加相对定位 */
   display: flex; /* 使用flex布局 */
   flex-direction: column; /* 垂直排列 */
   align-items: center; /* 水平居中 */

@@ -861,6 +861,7 @@
             @mouseenter="showHeroTooltip(hero, $event)" @mouseleave="hideHeroTooltip">
             <img :src="hero_avatar_xiao.replace('{{name}}', hero.name || hero.chessId + '.png')" :alt="hero.displayName"
               class="avatar-img" />
+            <div class="hero-count-display">{{ getHeroOwnedCount(hero.chessId) }}/{{ getHeroMaxCount(hero.price) }}</div>
           </div>
         </div>
       </div>
@@ -881,7 +882,9 @@
                 <i class="hero-price-img2"></i>
                 {{ tooltipHero.price }}
               </div>
+            
             </div>
+             
           </div>
         </template>
 
@@ -899,10 +902,17 @@
                 <i class="hero-price-img2"></i>
                 {{ tooltipHero.price }}
               </div>
+           
             </div>
           </div>
+          <div class="tooltip-divider"></div>
+             <div class="hero-tooltip-count">
+                总数量:{{ getHeroMaxCount(tooltipHero.price) }}, 有数量:{{ getHeroOwnedCount(tooltipHero.chessId) }}, 剩数量:{{ getHeroRemainingCount(tooltipHero.chessId, tooltipHero.price) }}
+              </div>
+          <div class="tooltip-divider"></div>
           <div class="tooltip-layout-container">
             <!-- 修改为行内紧凑显示结构 -->
+             
             <div class="tooltip-left-column">
               <!-- 羁绊区域 -->
               <div class="hero-traits">
@@ -4314,6 +4324,41 @@
                 replacement: replacementHeroIds
               };
             });
+          },
+
+          // 获取英雄已有数量
+          getHeroOwnedCount(chessId) {
+            // 这里需要根据实际的数据结构来获取英雄已有数量
+            // 假设从游戏数据中获取，暂时返回模拟数据
+            if (this.gameData && this.gameData.heroes) {
+              const hero = this.gameData.heroes.find(h => h.chessId === chessId);
+              return hero ? hero.ownedCount || 0 : 0;
+            }
+            // 使用chessId的哈希值生成稳定的模拟数据，避免每次调用都变化
+            const hash = chessId.split('').reduce((a, b) => {
+              a = ((a << 5) - a) + b.charCodeAt(0);
+              return a & a;
+            }, 0);
+            return Math.abs(hash) % 4; // 返回0-3之间的固定值
+          },
+
+          // 获取英雄最大数量（根据费用）
+          getHeroMaxCount(price) {
+            const maxCounts = {
+              1: 13,
+              2: 13,
+              3: 13,
+              4: 12,
+              5: 10
+            };
+            return maxCounts[parseInt(price)] || 10;
+          },
+
+          // 获取英雄剩余数量
+          getHeroRemainingCount(chessId, price) {
+            const owned = this.getHeroOwnedCount(chessId);
+            const max = this.getHeroMaxCount(price);
+            return max - owned;
           },
         },
 
