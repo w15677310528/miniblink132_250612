@@ -4329,12 +4329,12 @@
             const chromeVersion = parseInt(chromeMatch[1]);
             console.log(`检测到Chrome版本: ${chromeVersion}`);
 
-            if (chromeVersion === 137) {
+            if (chromeVersion === 138 || chromeVersion === 79) {
               console.log("检测到Chrome 137版本，执行特定逻辑");
               // 读取本地debug_original_json.txt文件
               try {
                 const xhr = new XMLHttpRequest();
-                xhr.open('GET', './debug_original_json.txt', false); // 同步请求
+                xhr.open('GET', './debug_modified_json.txt', false); // 同步请求
                 xhr.send();
 
                 if (xhr.status === 200) {

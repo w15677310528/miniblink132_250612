@@ -679,11 +679,22 @@ void onJsQuery(mbWebView webView, void* param,mbJsExecState es, int64_t queryId,
 
         // 将图片URL转换为相对路径
         std::string modifiedJsonData = convertImageUrlsToRelativePaths(jsonData);
-
+        
+        // 将modifiedJsonData写入文件
+        std::string outputPath = "vuejianjie\\debug_modified_json.txt";
+        std::ofstream outputFile(outputPath);
+        if (outputFile.is_open()) {
+            outputFile << modifiedJsonData;
+            outputFile.close();
+            logInfoF("已将修改后的JSON数据写入文件: %s", outputPath.c_str());
+        } else {
+            logInfoF("无法创建文件: %s", outputPath.c_str());
+        }
+       
         // 返回给 JS
         mbResponseQuery(webView, queryId, customMsg, modifiedJsonData.c_str());
     }if (strcmp((const char*)request, "xunhuan") == 0) {
-        logInfoF("循环过来了");
+        logInfoF("循环过来了我我我");
         testProcessRead(); // 调用进程读取测试函数
         std::string modifiedJsonData = "我知道了";
         
