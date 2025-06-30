@@ -1506,7 +1506,7 @@
             tooltipHero: null,
             tooltipX: 0,
             tooltipY: 0,
-            // 已移除防抖定时器
+            tooltipDebounceTimer: null, // 防抖定时器
             isPositionPanelTooltip: false, // 标识是否来自position-panel的悬浮显示
             topMenu: '', // 新增顶部菜单状态
             showLineupDetail: false, // 是否显示阵容详情
@@ -1532,6 +1532,7 @@
               top: '0px',
               left: '0px'
             },
+            simpleTooltipDebounceTimer: null, // 简单tooltip防抖定时器
             currentEquip: {
               name: '',
               imagePath: '',
@@ -1543,6 +1544,7 @@
               top: '0px',
               left: '0px'
             },
+            equipTooltipDebounceTimer: null, // 装备tooltip防抖定时器
             // 海克斯悬浮提示框相关
             currentHex: {
               name: '',
@@ -1556,6 +1558,7 @@
               top: '0px',
               left: '0px'
             },
+            hexTooltipDebounceTimer: null, // 海克斯tooltip防抖定时器
             // 海克斯选择悬浮提示相关
             hexStrategyTooltipVisible: false,
             // 前期过度悬浮提示相关
@@ -2767,8 +2770,15 @@
               return;
             }
 
-            // 直接显示提示，无防抖延迟
-            this.showHeroTooltipInternal(hero, event);
+            // 清除之前的防抖定时器
+            if (this.tooltipDebounceTimer) {
+              clearTimeout(this.tooltipDebounceTimer);
+            }
+
+            // 设置防抖延迟，避免鼠标快速移动时频繁触发
+            this.tooltipDebounceTimer = setTimeout(() => {
+              this.showHeroTooltipInternal(hero, event);
+            }, 100); // 100ms防抖延迟
           },
 
           showHeroTooltipInternal(hero, event) {
@@ -2928,6 +2938,12 @@
             });
           },
           hideHeroTooltip() {
+            // 清除防抖定时器，避免延迟显示
+            if (this.tooltipDebounceTimer) {
+              clearTimeout(this.tooltipDebounceTimer);
+              this.tooltipDebounceTimer = null;
+            }
+            
             this.tooltipVisible = false;
             this.tooltipHero = null;
             this.isPositionPanelTooltip = false; // 重置position-panel标识
@@ -2985,6 +3001,18 @@
             }, 500);
           },
           showTooltipText(text, event) {
+            // 清除之前的防抖定时器
+            if (this.simpleTooltipDebounceTimer) {
+              clearTimeout(this.simpleTooltipDebounceTimer);
+            }
+
+            // 设置防抖延迟，避免鼠标快速移动时频繁触发
+            this.simpleTooltipDebounceTimer = setTimeout(() => {
+              this.showTooltipTextInternal(text, event);
+            }, 100); // 100ms防抖延迟
+          },
+
+          showTooltipTextInternal(text, event) {
             this.simpleTooltipText = text;
             this.simpleTooltipVisible = true;
 
@@ -3004,14 +3032,27 @@
             };
           },
           hideTooltipText() {
+            // 清除防抖定时器，避免延迟显示
+            if (this.simpleTooltipDebounceTimer) {
+              clearTimeout(this.simpleTooltipDebounceTimer);
+              this.simpleTooltipDebounceTimer = null;
+            }
+            
             this.simpleTooltipVisible = false;
           },
           showEquipTooltip(equip, event) {
             // 确保提示框处理各种可能的装备数据格式
             if (!equip) return; // 防止空数据错误
 
-            // 直接显示装备提示，无防抖延迟
-            this.showEquipTooltipInternal(equip, event);
+            // 清除之前的防抖定时器
+            if (this.equipTooltipDebounceTimer) {
+              clearTimeout(this.equipTooltipDebounceTimer);
+            }
+
+            // 设置防抖延迟，避免鼠标快速移动时频繁触发
+            this.equipTooltipDebounceTimer = setTimeout(() => {
+              this.showEquipTooltipInternal(equip, event);
+            }, 100); // 100ms防抖延迟
           },
 
           showEquipTooltipInternal(equip, event) {
@@ -3073,12 +3114,30 @@
             };
           },
           hideEquipTooltip() {
+            // 清除防抖定时器，避免延迟显示
+            if (this.equipTooltipDebounceTimer) {
+              clearTimeout(this.equipTooltipDebounceTimer);
+              this.equipTooltipDebounceTimer = null;
+            }
+            
             this.equipTooltipVisible = false;
           },
           // 海克斯悬浮提示框方法
           showHexTooltip(hex, event) {
             if (!hex) return;
 
+            // 清除之前的防抖定时器
+            if (this.hexTooltipDebounceTimer) {
+              clearTimeout(this.hexTooltipDebounceTimer);
+            }
+
+            // 设置防抖延迟，避免鼠标快速移动时频繁触发
+            this.hexTooltipDebounceTimer = setTimeout(() => {
+              this.showHexTooltipInternal(hex, event);
+            }, 100); // 100ms防抖延迟
+          },
+
+          showHexTooltipInternal(hex, event) {
             // 如果传入的是字符串ID，先尝试获取海克斯数据
             let hexData = null;
             if (typeof hex === 'string') {
@@ -3147,6 +3206,12 @@
             };
           },
           hideHexTooltip() {
+            // 清除防抖定时器，避免延迟显示
+            if (this.hexTooltipDebounceTimer) {
+              clearTimeout(this.hexTooltipDebounceTimer);
+              this.hexTooltipDebounceTimer = null;
+            }
+            
             this.hexTooltipVisible = false;
           },
           // 海克斯选择悬浮提示方法
@@ -4320,7 +4385,7 @@
             if (heroDataList.length > 0) {
               // 将英雄数据转换为JSON字符串发送
               const heroDataJson = JSON.stringify(heroDataList);
-              console.log(`发送 ${heroDataList.length} 个英雄数据到后端`);
+              //console.log(`发送 ${heroDataList.length} 个英雄数据到后端`);
               
               window.mbQuery(0x003, `sendAllHeroes:${heroDataJson}`,(customMsg, response)  => {
                 try {
@@ -4331,16 +4396,16 @@
                   this.$forceUpdate();
                   
                   const endTime = performance.now();
-                  console.log(`英雄数据处理完成，耗时: ${(endTime - startTime).toFixed(2)}ms，获得 ${Object.keys(heroCounts).length} 个英雄数量`);
+                  //console.log(`英雄数据处理完成，耗时: ${(endTime - startTime).toFixed(2)}ms，获得 ${Object.keys(heroCounts).length} 个英雄数量`);
                   
                 } catch (error) {
-                  console.error('解析英雄数量数据失败:', error);
-                  console.error('响应长度:', response ? response.length : 0);
-                  console.error('响应前100字符:', response ? response.substring(0, 100) : 'null');
+                  //console.error('解析英雄数量数据失败:', error);
+                  //console.error('响应长度:', response ? response.length : 0);
+                  //console.error('响应前100字符:', response ? response.substring(0, 100) : 'null');
                 }
               });
             } else {
-              console.log('没有可见的英雄，跳过发送');
+              //console.log('没有可见的英雄，跳过发送');
             }
           },
 
@@ -4441,7 +4506,7 @@
               this.sendAllHeroesToBackend();
               heroDataProcessing = false;
             }
-          }, 1000); // 每3秒发送一次
+          }, 100); // 每3秒发送一次
           
 
 

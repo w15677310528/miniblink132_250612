@@ -49,13 +49,16 @@ struct HeroData {
 };
 
 // 全局变量用于英雄数据管理
-std::queue<HeroData> g_heroInputBuffer;  // 输入缓冲区
-std::map<std::string, int> g_heroOutputCache; // 输出缓存
+std::queue<HeroData> g_heroInputBuffer;  // 输入缓冲区（前端写入选中数据）
+std::map<std::string, int> g_heroOutputCache; // 输出缓存（后台线程写入数量数据）
 std::mutex g_inputMutex;   // 输入缓冲区互斥锁
 std::mutex g_outputMutex;  // 输出缓存互斥锁
-// 方案1：移除后台线程相关变量
-// bool g_backgroundThreadRunning = false; // 后台线程运行标志
-// std::thread g_backgroundThread; // 后台线程
+
+// 后台内存读写线程相关变量
+bool g_memoryThreadRunning = false; // 内存读写线程运行标志
+std::thread g_memoryThread; // 内存读写线程
+std::queue<HeroData> g_memoryProcessQueue; // 内存处理队列
+std::mutex g_memoryQueueMutex; // 内存处理队列互斥锁
 
 template<typename... Args>
 void logInfoF(const char* format, Args... args);
@@ -65,54 +68,6 @@ int getHeroOwnedCountByAlt(const std::string& alt) {
     // 返回固定数量200进行测试
     return 200;
 }
-
-// 方案1：移除后台线程处理函数，改为同步处理
-/*
-void backgroundHeroProcessing() {
-    logInfoF("英雄数据后台处理线程启动");
-    
-    while (g_backgroundThreadRunning) {
-        std::vector<HeroData> heroBatch;
-        
-        // 从输入缓冲区获取所有数据进行全量处理
-        {
-            std::lock_guard<std::mutex> lock(g_inputMutex);
-            while (!g_heroInputBuffer.empty()) {
-                heroBatch.push_back(g_heroInputBuffer.front());
-                g_heroInputBuffer.pop();
-            }
-        }
-        
-        if (!heroBatch.empty()) {
-            logInfoF("全量处理 %d 个英雄数据", (int)heroBatch.size());
-            
-            // 全量处理英雄数据
-            std::map<std::string, int> batchResults;
-            for (const auto& heroData : heroBatch) {
-                // 模拟内存读写操作（这里可以替换为实际的内存读取逻辑）
-                int ownedCount = getHeroOwnedCountByAlt(heroData.alt);
-                batchResults[heroData.alt] = ownedCount;
-                logInfoF("处理英雄数据: %s -> %d (选中状态: %s)", heroData.alt.c_str(), ownedCount, heroData.selected ? "是" : "否");
-            }
-            
-            // 批量更新输出缓存
-            {
-                std::lock_guard<std::mutex> lock(g_outputMutex);
-                for (const auto& result : batchResults) {
-                    g_heroOutputCache[result.first] = result.second;
-                }
-            }
-            
-            logInfoF("全量处理完成，已更新 %d 个英雄数据到缓存", (int)batchResults.size());
-        }
-        
-        // 减少休眠时间到50ms，提高响应速度
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    }
-    
-    logInfoF("英雄数据后台处理线程结束");
-}
-*/
 
 // 进程读取测试函数
 void testProcessRead() {
@@ -784,87 +739,125 @@ void onJsQuery(mbWebView webView, void* param,mbJsExecState es, int64_t queryId,
         
         mbResponseQuery(webView, queryId, customMsg, modifiedJsonData.c_str());
     } else if (strncmp((const char*)request, "sendAllHeroes:", 14) == 0) {
+        // 高优先级处理：无延迟响应
         std::string heroJsonData = std::string((const char*)request + 14);
-        {
-            std::lock_guard<std::mutex> lock(g_inputMutex);
-            while (!g_heroInputBuffer.empty()) {
-                g_heroInputBuffer.pop();
-            }
-        }
+        
         try {
             // 解析JSON数组
             json heroArray = json::parse(heroJsonData);
           
-            // 遍历所有英雄对象
-            for (const auto& heroObj : heroArray) {
-                if (heroObj.contains("alt") && heroObj["alt"].is_string()) {
-                    HeroData heroData;
-                    heroData.alt = heroObj["alt"].get<std::string>();
-                    heroData.selected = false;
-                    
-                    // 获取选中状态
-                    if (heroObj.contains("selected") && heroObj["selected"].is_boolean()) {
-                        heroData.selected = heroObj["selected"].get<bool>();
-                    }
-                    
-                    if (!heroData.alt.empty()) {
-                        // 添加到输入缓冲区，所有英雄都添加（用于获取数量）
-                        std::lock_guard<std::mutex> lock(g_inputMutex);
-                        g_heroInputBuffer.push(heroData);
-                        //logInfoF("添加英雄到处理队列: %s (选中状态: %s)", heroData.alt.c_str(), heroData.selected ? "是" : "否");
+            // 快速写入内存处理队列（异步处理）
+            {
+                std::lock_guard<std::mutex> lock(g_memoryQueueMutex);
+                // 清空旧数据
+                while (!g_memoryProcessQueue.empty()) {
+                    g_memoryProcessQueue.pop();
+                }
+                
+                // 遍历所有英雄对象，写入处理队列
+                for (const auto& heroObj : heroArray) {
+                    if (heroObj.contains("alt") && heroObj["alt"].is_string()) {
+                        HeroData heroData;
+                        heroData.alt = heroObj["alt"].get<std::string>();
+                        heroData.selected = false;
+                        
+                        // 获取选中状态
+                        if (heroObj.contains("selected") && heroObj["selected"].is_boolean()) {
+                            heroData.selected = heroObj["selected"].get<bool>();
+                        }
+                        
+                        if (!heroData.alt.empty()) {
+                            g_memoryProcessQueue.push(heroData);
+                        }
                     }
                 }
+                //logInfoF("已将 %d 个英雄数据写入内存处理队列", (int)g_memoryProcessQueue.size());
             }
         } catch (const json::exception& e) {
             logInfoF("JSON解析错误: %s", e.what());
-            logInfoF("原始JSON数据: %s", heroJsonData.c_str());
         }
         
-        // 直接同步处理所有英雄数据（方案1：移除后台线程）
-        std::vector<HeroData> heroBatch;
-        {
-            std::lock_guard<std::mutex> lock(g_inputMutex);
-            while (!g_heroInputBuffer.empty()) {
-                heroBatch.push_back(g_heroInputBuffer.front());
-                g_heroInputBuffer.pop();
-            }
-        }
-        
-        // 同步处理英雄数据并直接构建返回结果
+        // 立即从输出缓存读取数据返回（无延迟）
         json heroCountsJson;
-        if (!heroBatch.empty()) {
-            //logInfoF("同步处理 %d 个英雄数据", (int)heroBatch.size());
-            
-            for (const auto& heroData : heroBatch) {
-                int ownedCount = getHeroOwnedCountByAlt(heroData.alt);
-                heroCountsJson[heroData.alt] = ownedCount;
-                //logInfoF("处理英雄: %s -> %d (选中: %s)", heroData.alt.c_str(), ownedCount, heroData.selected ? "是" : "否");
-            }
-            
-            // 更新缓存（保留缓存机制以备后续查询）
-            {
-                std::lock_guard<std::mutex> lock(g_outputMutex);
-                for (const auto& pair : heroCountsJson.items()) {
-                    g_heroOutputCache[pair.key()] = pair.value();
-                }
-            }
-            
-            //logInfoF("同步处理完成，已处理 %d 个英雄", (int)heroBatch.size());
-        } else {
-            // 如果没有新数据，返回缓存中的数据
+        {
             std::lock_guard<std::mutex> lock(g_outputMutex);
             for (const auto& pair : g_heroOutputCache) {
                 heroCountsJson[pair.first] = pair.second;
             }
-            //logInfoF("无新数据，返回缓存中的 %d 个英雄数据", (int)heroCountsJson.size());
         }
         
         std::string result = heroCountsJson.dump();
-        //logInfoF("返回英雄数量数据，JSON长度: %d 字节，包含 %d 个英雄", (int)result.length(), (int)heroCountsJson.size());
-       
-
+        //logInfoF("无延迟返回缓存数据，包含 %d 个英雄", (int)heroCountsJson.size());
+        
         mbResponseQuery(webView, queryId, customMsg, result.c_str());
     }
+}
+
+// 后台内存读写线程函数（死循环处理）
+void memoryReadWriteThread() {
+    logInfoF("内存读写线程启动");
+
+    while (g_memoryThreadRunning) {
+        std::vector<HeroData> processBatch;
+
+        // 从内存处理队列获取数据
+        {
+            std::lock_guard<std::mutex> lock(g_memoryQueueMutex);
+            while (!g_memoryProcessQueue.empty()) {
+                processBatch.push_back(g_memoryProcessQueue.front());
+                g_memoryProcessQueue.pop();
+            }
+        }
+
+        if (!processBatch.empty()) {
+            logInfoF("内存线程处理 %d 个英雄数据", (int)processBatch.size());
+
+            // 批量处理英雄数据（内存读写操作）
+
+            //-------------------------------------------------
+
+            std::map<std::string, int> memoryResults;
+            for (const auto& heroData : processBatch) {
+                // 实际的内存读写操作（替换为真实的内存读取逻辑）
+
+                int ownedCount = getHeroOwnedCountByAlt(heroData.alt);
+                memoryResults[heroData.alt] = ownedCount;
+                if (heroData.selected)
+                {
+                    logInfoF("内存读取英雄: %s -> %d (选中: %s)", heroData.alt.c_str(), ownedCount, heroData.selected ? "是" : "否");
+                }
+
+            }
+
+            
+            //-------------内存功能都写到这里------------------------------------
+
+
+
+
+
+
+
+
+
+
+            //-------------内存功能都写到这里------------------------------------
+            // 将结果写入输出缓存供前端读取
+            {
+                std::lock_guard<std::mutex> lock(g_outputMutex);
+                for (const auto& result : memoryResults) {
+                    g_heroOutputCache[result.first] = result.second;
+                }
+            }
+
+            logInfoF("内存处理完成，已更新 %d 个英雄数据到缓存", (int)memoryResults.size());
+        }
+
+        // 短暂休眠避免CPU占用过高
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    logInfoF("内存读写线程结束");
 }
 
 int main()
@@ -897,7 +890,7 @@ int main()
         logInfoF("获取当前目录失败");
         return 1;
     }
-    std::wstring dllPath = std::wstring(currentDir) + L"\\mb108_x64.dll";
+    std::wstring dllPath = std::wstring(currentDir) + L"\\mb132_x64.dll";
     DWORD attr = GetFileAttributesW(dllPath.c_str());
     if (attr == INVALID_FILE_ATTRIBUTES || (attr & FILE_ATTRIBUTE_DIRECTORY)) {
         MessageBoxW(NULL, L"找不到 mb132_x64.dll", L"错误", MB_OK | MB_ICONERROR);
@@ -929,10 +922,10 @@ int main()
 
     mbOnJsQuery(mbView, onJsQuery,NULL);
 
-    // 方案1：移除后台线程，改为同步处理
-    // g_backgroundThreadRunning = true;
-    // g_backgroundThread = std::thread(backgroundHeroProcessing);
-    logInfoF("英雄数据后台线程已启动");
+    // 启动内存读写线程
+    g_memoryThreadRunning = true;
+    g_memoryThread = std::thread(memoryReadWriteThread);
+    logInfoF("内存读写线程已启动");
 
     std::wstring vuePath = std::wstring(currentDir) + L"\\vuejianjie\\index.html";
     std::string vuePathUtf8(vuePath.begin(), vuePath.end());
@@ -940,15 +933,15 @@ int main()
     mbLoadURL(mbView, vuePathUtf8.c_str());
    
     mbShowWindow(mbView, true);
-    mbRunJs();
+
     mbRunMessageLoop();
     
-    // 方案1：无需停止后台线程
-    // g_backgroundThreadRunning = false;
-    // if (g_backgroundThread.joinable()) {
-    //     g_backgroundThread.join();
-    // }
-    logInfoF("同步处理模式，无需停止后台线程");
+    // 停止内存读写线程
+    g_memoryThreadRunning = false;
+    if (g_memoryThread.joinable()) {
+        g_memoryThread.join();
+    }
+    logInfoF("内存读写线程已停止");
     
     // 恢复原始窗口过程
     if (g_originalWndProc && g_mbView) {
