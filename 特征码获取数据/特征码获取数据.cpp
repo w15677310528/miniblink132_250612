@@ -355,24 +355,32 @@ public:
 		return result.dump(2); // 美化输出，缩进2个空格
 	}
 
-	bool saveToJsonFile(const std::string& filename) const {
-		try {
-			std::ofstream file(filename);
-			if (!file.is_open()) {
-				Logger::error("无法创建JSON文件: {}", filename);
-				return false;
-			}
+bool saveToJsonFile(const std::string& filename) const {
+    try {
+        // 使用UTF-8编码保存文件
+        std::ofstream file(filename, std::ios::out | std::ios::binary);
+        if (!file.is_open()) {
+            Logger::error("无法创建JSON文件: {}", filename);
+            return false;
+        }
 
-			file << toJson();
-			file.close();
-			Logger::info("结果已保存到JSON文件: {}", filename);
-			return true;
-		}
-		catch (const std::exception& e) {
-			Logger::error("保存JSON文件时发生异常: {}", e.what());
-			return false;
-		}
-	}
+        // 写入UTF-8 BOM（可选，但有助于确保正确识别编码）
+        const char utf8_bom[] = "\xEF\xBB\xBF";
+        file.write(utf8_bom, 3);
+        
+        // 获取JSON字符串并确保以UTF-8编码写入
+        std::string jsonStr = toJson();
+        file.write(jsonStr.c_str(), jsonStr.length());
+        
+        file.close();
+        Logger::info("结果已保存到JSON文件 (UTF-8编码): {}", filename);
+        return true;
+    }
+    catch (const std::exception& e) {
+        Logger::error("保存JSON文件时发生异常: {}", e.what());
+        return false;
+    }
+}
 
 	const std::vector<PatternInfo>& getPatterns() const {
 		return patterns_;
@@ -746,7 +754,7 @@ int main() {
 		auto tm = *std::localtime(&time_t);
 
 		std::ostringstream filename;
-		filename << "pattern_results_" << std::put_time(&tm, "%Y-%m-%d_%H-%M-%S") << ".json";
+		filename << "pattern_results_" << ".json";
 		manager.saveToJsonFile(filename.str());
 
 		// 展示最终结果摘要
